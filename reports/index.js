@@ -1,5 +1,13 @@
-import {generateReport as generateBestuurseenhedenReport} from './bestuurseenhedenReport'
-import {generateReport as generateBerichtencentrumMessagesReport} from './berichtencentrumMessages'
-import {generateReport as generateInzendingenReport} from './inzendingenReport'
-import {generateReport as generateAccountReport} from './accountReport'
+import BestuurseenhedenReport from './bestuurseenhedenReport'
+import BerichtencentrumMessagesReport from './berichtencentrumMessages'
+import InzendingenReport from './inzendingenReport'
+import AccountReport from './accountReport'
+
+
+export default [
+  BestuurseenhedenReport,
+  BerichtencentrumMessagesReport,
+  InzendingenReport,
+  AccountReport
+]
 
