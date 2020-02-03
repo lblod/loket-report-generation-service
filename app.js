@@ -3,9 +3,6 @@ import cron from 'node-cron'
 import berichtencentrumMessagesReport from './reports/berichtencentrumMessages'
 import reports from './reports/index'
 
-
-const DEFAULT_GRAPH = process.env.DEFAULT_GRAPH || 'http://mu.semte.ch/application';
-
 app.get('/test', async (req, res) => {
   await berichtencentrumMessagesReport()  
   res.send('Done ^^')
@@ -19,6 +16,7 @@ app.get('/reports', async (req, res) => {
   const reportName = req.query.name
   if(reportName) {
     reports.forEach(async ({name, execute}) => {
+      console.log(name)
       if(reportName === name) {
         await execute()
         res.send('Done ^^')

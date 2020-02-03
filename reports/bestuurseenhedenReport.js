@@ -1,9 +1,5 @@
-import cron from 'node-cron'
-import { app, query, errorHandler, sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid } from 'mu';
-import {generateCSV, createFileOnDisk, createReport} from '../helpers.js'
-import fs from 'fs'
-
-
+import {query} from 'mu';
+import {generateReportFromData} from '../helpers.js'
 
 export default {
   cronPattern: '0 0 * * *',
@@ -11,7 +7,8 @@ export default {
   execute: async () => {
     const reportData = {
       title: 'Bestuurseenheden Report',
-      description: 'All Bestuurseenheden'
+      description: 'All Bestuurseenheden',
+      filePrefix: 'bestuurseenheden'
     }
     console.log('Generate Bestuurseenheden Report')
     const queryString = `
@@ -35,22 +32,6 @@ export default {
       province: bestuurseenheid.province.value,
       uri: bestuurseenheid.uri.value,
     }))
-    const fileName = `bestuurseenhedenReport-${uuid()}`
-    const fileExtension = 'csv'
-    const fileFormat = 'text/csv'
-    const csv = generateCSV(['name', 'type', 'province', 'uri'], data)
-    fs.writeFileSync(`/data/files/${fileName}.${fileExtension}`, csv)
-    const fileStats = fs.statSync(`/data/files/${fileName}.${fileExtension}`)
-    const fileInfo = {
-      name: fileName,
-      extension: fileExtension,
-      format: fileFormat,
-      created: new Date(fileStats.birthtime),
-      size: fileStats.size,
-      location: `${fileName}.${fileExtension}`
-    }
-    console.log(fileInfo)
-    const file = await createFileOnDisk(fileInfo)
-    await createReport(file, reportData)
+    await generateReportFromData(data, ['name', 'type', 'province', 'uri'], reportData)
   }
 }

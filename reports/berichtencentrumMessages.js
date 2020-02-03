@@ -1,16 +1,14 @@
-import cron from 'node-cron'
-import { app, errorHandler, sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid } from 'mu';
-import {generateCSV, createFileOnDisk, createReport} from '../helpers.js'
-import fs from 'fs'
+import {generateReportFromData} from '../helpers.js'
 import { querySudo as query } from '@lblod/mu-auth-sudo';
 
 export default {
   cronPattern: '0 0 * * *',
-  name: 'berichtencentrumMessages',
+  name: 'berichtencentrumMessagesReport',
   execute: async () => {
     const reportData = {
       title: 'Berichtencentrum Messages Report',
-      description: 'All new messages in Berichtencentrum'
+      description: 'All new messages in Berichtencentrum',
+      filePrefix: 'berichtencentrumMessages'
     }
     console.log('Generate Berichtencentrum Messages Report')
     const queryString = `
@@ -50,22 +48,6 @@ export default {
       bestuurNaam: row.bestuurNaam.value,
       bestuur: row.bestuur.value,
     }))
-    const fileName = `berichtencentrumMessagesReport-${uuid()}`
-    const fileExtension = 'csv'
-    const fileFormat = 'text/csv'
-    const csv = generateCSV(['datesent', 'betreft', 'dossiernr', 'bestuurNaam', 'bestuur'], data)
-    fs.writeFileSync(`/data/files/${fileName}.${fileExtension}`, csv)
-    const fileStats = fs.statSync(`/data/files/${fileName}.${fileExtension}`)
-    const fileInfo = {
-      name: fileName,
-      extension: fileExtension,
-      format: fileFormat,
-      created: new Date(fileStats.birthtime),
-      size: fileStats.size,
-      location: `${fileName}.${fileExtension}`
-    }
-    console.log(fileInfo)
-    const file = await createFileOnDisk(fileInfo)
-    await createReport(file, reportData)
+    await generateReportFromData(data, ['datesent', 'betreft', 'dossiernr', 'bestuurNaam', 'bestuur'], reportData)
   }
 }

@@ -1,8 +1,9 @@
 import { sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid, query } from 'mu';
+import fs from 'fs'
+
 const DEFAULT_GRAPH = (process.env || {}).DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
 const separator = ';'
 export function generateCSV(fields, data) {
-  console.log(fields)
   let result = ''
   const headerString = fields.join(separator)
   result += `${headerString}\n`
@@ -46,7 +47,7 @@ export async function createFileOnDisk({name, format, size, extension, created, 
       }
     }
   `
-  query(queryString)
+  await query(queryString)
   return logicalFileURI
 }
 
@@ -69,6 +70,24 @@ export async function createReport(file, {title, description}) {
       }
     }
   `
-  const queryResult = await query(queryString)
-  console.log(queryResult)
+  await query(queryString)
+}
+
+export async function generateReportFromData(data, attributes, reportInfo) {
+  const fileName = `${reportInfo.filePrefix}-${uuid()}`
+  const fileExtension = 'csv'
+  const fileFormat = 'text/csv'
+  const csv = generateCSV(attributes, data)
+  fs.writeFileSync(`/data/files/${fileName}.${fileExtension}`, csv)
+  const fileStats = fs.statSync(`/data/files/${fileName}.${fileExtension}`)
+  const fileInfo = {
+    name: fileName,
+    extension: fileExtension,
+    format: fileFormat,
+    created: new Date(fileStats.birthtime),
+    size: fileStats.size,
+    location: `${fileName}.${fileExtension}`
+  }
+  const file = await createFileOnDisk(fileInfo)
+  await createReport(file, reportInfo)
 }
