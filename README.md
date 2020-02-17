@@ -21,21 +21,26 @@ As you can see there are 2 volumes, first the one mounted to `/data/files` is th
 ## Defining reports
 
 ### main.mjs
-In order to define a report you have to create a file in the volume connecting to `/app/reports` called `index.mjs` this file will be the one in charge of exporting an array of report objects. For example:
+In order to define a report you have to create a file in the volume connecting to `/app/reports` called `index.js` this file will be the one in charge of exporting an array of report objects. For example:
 ```js
 import BestuurseenhedenReport from './bestuurseenhedenReport'
 import BerichtencentrumMessagesReport from './berichtencentrumMessages'
 import InzendingenReport from './inzendingenReport'
 import AccountReport from './accountReport'
+import bbcdrReport from './bbcdrReport'
+import sameRrnReport from './sameRrnReport'
+import failedSyncToMft from './failedSyncToMft'
 
 
-module.exports = [
+export default [
   BestuurseenhedenReport,
   BerichtencentrumMessagesReport,
   InzendingenReport,
-  AccountReport
+  AccountReport,
+  bbcdrReport,
+  sameRrnReport,
+  failedSyncToMft
 ]
-
 ```
 
 This file imports 4 reports from the same directory and exports an array containing all of them
