@@ -1,25 +1,25 @@
 import { sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid, query } from 'mu';
-import fs from 'fs'
+import fs from 'fs';
 
 const DEFAULT_GRAPH = (process.env || {}).DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
-const separator = ';'
+const separator = ';';
 export function generateCSV(fields, data) {
-  let result = ''
-  const headerString = fields.join(separator)
-  result += `${headerString}\n`
+  let result = '';
+  const headerString = fields.join(separator);
+  result += `${headerString}\n`;
   const csvRows = data.map((row) => {
-    const dataRow = fields.map((header) => row[header])
-    return dataRow.join(separator)
-  })
-  result += `${csvRows.join('\n')}`
-  return result
+    const dataRow = fields.map((header) => row[header]);
+    return dataRow.join(separator);
+  });
+  result += `${csvRows.join('\n')}`;
+  return result;
 }
 
 export async function createFileOnDisk({name, format, size, extension, created, location}) {
-  const logicalFileUuid = uuid()
-  const logicalFileURI = `http://data.lblod.info/files/${logicalFileUuid}`
-  const physicalFileUuid = uuid()
-  const physicalFileURI = `share://${location}`
+  const logicalFileUuid = uuid();
+  const logicalFileURI = `http://data.lblod.info/files/${logicalFileUuid}`;
+  const physicalFileUuid = uuid();
+  const physicalFileURI = `share://${location}`;
   const queryString = `
     PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
     PREFIX dct: <http://purl.org/dc/terms/>
@@ -46,14 +46,14 @@ export async function createFileOnDisk({name, format, size, extension, created, 
           nie:dataSource ${sparqlEscapeUri(logicalFileURI)}.
       }
     }
-  `
-  await query(queryString)
-  return logicalFileURI
+  `;
+  await query(queryString);
+  return logicalFileURI;
 }
 
 export async function createReport(file, {title, description}) {
-  const reportUUID = uuid()
-  const reportURI = `http://data.lblod.info/id/reports/${reportUUID}`
+  const reportUUID = uuid();
+  const reportURI = `http://data.lblod.info/id/reports/${reportUUID}`;
   const queryString = `
     PREFIX dct: <http://purl.org/dc/terms/>
     PREFIX prov: <http://www.w3.org/ns/prov#>
@@ -69,17 +69,17 @@ export async function createReport(file, {title, description}) {
           prov:generated ${sparqlEscapeUri(file)} .
       }
     }
-  `
-  await query(queryString)
+  `;
+  await query(queryString);
 }
 
 export async function generateReportFromData(data, attributes, reportInfo) {
-  const fileName = `${reportInfo.filePrefix}-${uuid()}`
-  const fileExtension = 'csv'
-  const fileFormat = 'text/csv'
-  const csv = generateCSV(attributes, data)
-  fs.writeFileSync(`/data/files/${fileName}.${fileExtension}`, csv)
-  const fileStats = fs.statSync(`/data/files/${fileName}.${fileExtension}`)
+  const fileName = `${reportInfo.filePrefix}-${uuid()}`;
+  const fileExtension = 'csv';
+  const fileFormat = 'text/csv';
+  const csv = generateCSV(attributes, data);
+  fs.writeFileSync(`/data/files/${fileName}.${fileExtension}`, csv);
+  const fileStats = fs.statSync(`/data/files/${fileName}.${fileExtension}`);
   const fileInfo = {
     name: fileName,
     extension: fileExtension,
@@ -87,7 +87,7 @@ export async function generateReportFromData(data, attributes, reportInfo) {
     created: new Date(fileStats.birthtime),
     size: fileStats.size,
     location: `${fileName}.${fileExtension}`
-  }
-  const file = await createFileOnDisk(fileInfo)
-  await createReport(file, reportInfo)
+  };
+  const file = await createFileOnDisk(fileInfo);
+  await createReport(file, reportInfo);
 }
