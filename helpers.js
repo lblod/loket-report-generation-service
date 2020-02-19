@@ -78,8 +78,8 @@ export async function generateReportFromData(data, attributes, reportInfo) {
   const fileExtension = 'csv';
   const fileFormat = 'text/csv';
   const csv = generateCSV(attributes, data);
-  fs.writeFileSync(`/data/files/${fileName}.${fileExtension}`, csv);
-  const fileStats = fs.statSync(`/data/files/${fileName}.${fileExtension}`);
+  fs.writeFileSync(`/share/${fileName}.${fileExtension}`, csv);
+  const fileStats = fs.statSync(`/share/${fileName}.${fileExtension}`);
   const fileInfo = {
     name: fileName,
     extension: fileExtension,
