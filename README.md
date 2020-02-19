@@ -7,15 +7,15 @@ In order to add the report generation service to your app you have to copy and p
 
 ```yaml
 reportService:
-    image: lblod/loket-report-generation-service:0.0.1
+    image: lblod/loket-report-generation-service:0.1.0
     links:
       - database:database
     volumes:
-      - ./data/files:/data/files
-      - ./data/reports:/app/reports
+      - ./data/files:/share
+      - ./config/reports:/app/reports
 ```
 
-As you can see there are 2 volumes, first the one mounted to `/data/files` is the one where the reports will be written to, the path is important because is related to the file info written to the database. The other volume, mounted to `/app/reports` is where the reports code will be.
+As you can see there are 2 volumes, first the one mounted to `/share` is the one where the reports will be written to, the path is important because is related to the file info written to the database. The other volume, mounted to `/confid/reports` is where the reports code will be.
 
 
 ## Defining reports
