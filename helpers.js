@@ -1,7 +1,7 @@
 import { sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid, query } from 'mu';
 import fs from 'fs';
 
-const DEFAULT_GRAPH = (process.env || {}).DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
+const DEFAULT_GRAPH = process.env.DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
 const separator = ';';
 export function generateCSV(fields, data) {
   let result = '';
