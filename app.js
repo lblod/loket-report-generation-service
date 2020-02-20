@@ -1,7 +1,14 @@
 import { app, errorHandler } from 'mu';
 import cron from 'node-cron';
+import bodyParser from 'body-parser';
+
 import reports from './reports/index';
 
+// parse application/x-www-form-urlencoded
+app.use(bodyParser.urlencoded({ extended: false }));
+
+// parse application/json
+app.use(bodyParser.json());
 
 reports.forEach(({cronPattern, execute}) => {
   if(cronPattern) {
