@@ -8,7 +8,7 @@ reports.forEach(({cronPattern, execute}) => {
     try {
       cron.schedule(cronPattern, execute);
     }catch(e){
-      console.log(e)
+      console.log(e);
     }
   }
 });
@@ -16,7 +16,7 @@ reports.forEach(({cronPattern, execute}) => {
 app.post('/reports', async (req, res) => {
   const reportName = req.body.name;
   if(reportName) {
-    let report = reports.find((report) => report.name === reportName)
+    let report = reports.find((report) => report.name === reportName);
     if(report) {
       await report.execute();
       return res.json({
