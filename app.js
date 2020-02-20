@@ -14,28 +14,26 @@ reports.forEach(({cronPattern, execute}) => {
 });
 
 app.post('/reports', async (req, res) => {
-  const reportName = req.body.name;
+  const reportName = req.body.data.attributes.reportName;
   if(reportName) {
     let report = reports.find((report) => report.name === reportName);
     if(report) {
       await report.execute();
       return res.json({
         data: {
-          type: 'result',
-          id: 1,
+          type: 'report-generation-tasks',
           attributes: {
-            label: 'success'
-          }
+            status: 'success'
+          } 
         }
       });
     } else {
       res.status(404);
       return res.json({
         data: {
-          type: 'result',
-          id: 2,
+          type: 'report-generation-tasks',
           attributes: {
-            label: 'error',
+            status: 'error',
             info: `There's no report named ${reportName}`
           }
         }
@@ -45,10 +43,9 @@ app.post('/reports', async (req, res) => {
     res.status(400);
     return res.json({
       data: {
-        type: 'result',
-        id: 2,
+        type: 'report-generation-tasks',
         attributes: {
-          label: 'error',
+          status: 'error',
           info: 'No report name specified in the request'
         }
       }
