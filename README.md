@@ -6,7 +6,7 @@ The report generation service provides a way of generating reports from the data
 In order to add the report generation service to your app you have to copy and paste the following snippet to your docker-compose.yml
 
 ```yaml
-reportService:
+report-generation:
     image: lblod/loket-report-generation-service:0.1.0
     links:
       - database:database
@@ -20,7 +20,7 @@ As you can see there are 2 volumes, first the one mounted to `/share` is the one
 
 ## Defining reports
 
-### main.mjs
+### index.js
 In order to define a report you have to create a file in the volume connecting to `/app/reports` called `index.js` this file will be the one in charge of exporting an array of report objects. For example:
 ```js
 import BestuurseenhedenReport from './bestuurseenhedenReport'
