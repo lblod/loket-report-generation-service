@@ -7,7 +7,7 @@ In order to add the report generation service to your app you have to copy and p
 
 ```yaml
 report-generation:
-    image: lblod/loket-report-generation-service:0.1.0
+    image: lblod/loket-report-generation-service:0.2.0
     links:
       - database:database
     volumes:
