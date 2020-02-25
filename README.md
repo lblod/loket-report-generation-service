@@ -15,7 +15,7 @@ report-generation:
       - ./config/reports:/app/reports
 ```
 
-As you can see there are 2 volumes, first the one mounted to `/share` is the one where the reports will be written to, the path is important because is related to the file info written to the database. The other volume, mounted to `/confid/reports` is where the reports code will be.
+As you can see there are 2 volumes, first the one mounted to `/share` is the one where the reports will be written to, the path is important because is related to the file info written to the database. The other volume, mounted to `/config/reports` is where the reports code will be.
 
 
 ## Defining reports
