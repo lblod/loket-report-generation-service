@@ -25,7 +25,7 @@ app.post('/reports', async (req, res) => {
   if(reportName) {
     let report = reports.find((report) => report.name === reportName);
     if(report) {
-      await report.execute();
+      report.execute();
       return res.json({
         data: {
           type: 'report-generation-tasks',
