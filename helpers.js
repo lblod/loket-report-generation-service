@@ -93,31 +93,31 @@ export async function generateReportFromData(data, attributes, reportInfo) {
   await createReport(file, reportInfo);
 }
 
-export async function batchedQuery(queryString, batchSize=1000) {
+export async function batchedQuery(queryString, batchSize=1000, maxNumberOfBatches=null) {
   let moreData = true;
   let actualIndex = 0;
   let response = undefined;
+  let iteration = 0;
   while(moreData) {
-    console.log('INDEX')
-    console.log(actualIndex);
     const batchedQueryString = `
       ${queryString}
       LIMIT ${batchSize}
       OFFSET ${actualIndex}
     `;
-    const data = await query(batchedQueryString)
+    const data = await query(batchedQueryString);
     if(!response) {
-      response = data
+      response = data;
     } else {
       response.results.bindings = response.results.bindings.concat(data.results.bindings);
     }
-    actualIndex +=batchSize;
-    console.log('LENGTH')
-    console.log(data.results.bindings.length)
+    actualIndex += batchSize;
     if(data.results.bindings.length < batchSize) {
-      moreData = false
+      moreData = false;
     }
+    if(maxNumberOfBatches  && iteration >= maxNumberOfBatches){
+      moreData = false;
+    }
+    ++iteration;
   }
-  console.log(response)
   return response;
 }
