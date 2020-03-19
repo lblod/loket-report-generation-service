@@ -1,4 +1,5 @@
-import { sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid, query } from 'mu';
+import { sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid } from 'mu';
+import { querySudo as query } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
 
 const DEFAULT_GRAPH = process.env.DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
@@ -90,4 +91,33 @@ export async function generateReportFromData(data, attributes, reportInfo) {
   };
   const file = await createFileOnDisk(fileInfo);
   await createReport(file, reportInfo);
+}
+
+export async function batchedQuery(queryString, batchSize=1000, maxNumberOfBatches=null) {
+  let moreData = true;
+  let actualIndex = 0;
+  let response = undefined;
+  let iteration = 0;
+  while(moreData) {
+    const batchedQueryString = `
+      ${queryString}
+      LIMIT ${batchSize}
+      OFFSET ${actualIndex}
+    `;
+    const data = await query(batchedQueryString);
+    if(!response) {
+      response = data;
+    } else {
+      response.results.bindings = response.results.bindings.concat(data.results.bindings);
+    }
+    actualIndex += batchSize;
+    if(data.results.bindings.length < batchSize) {
+      moreData = false;
+    }
+    if(maxNumberOfBatches  && iteration >= maxNumberOfBatches){
+      moreData = false;
+    }
+    ++iteration;
+  }
+  return response;
 }
