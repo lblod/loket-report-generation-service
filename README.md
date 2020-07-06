@@ -95,3 +95,16 @@ export default {
 }
 ```
 
+## Manually trigger reports
+
+In order to test your reports you will usually have the need of manually trigger one. For this you just have to send a POST request to `/reports` with the following JSON payload, being "myReport" the name defined in your report file
+
+```
+{
+  "data": {
+    "attributes": {
+      "reportName": "myReport"
+   }
+  }
+}
+```
