@@ -1,5 +1,5 @@
 import { app, errorHandler } from 'mu';
-import scheduleReportTask, { reportTaskMap } from './util/schedule-report-task';
+import scheduleReportTask from './util/schedule-report-task';
 import bodyParser from 'body-parser';
 import reports from './reports/index';
 
