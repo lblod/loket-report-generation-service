@@ -3,11 +3,16 @@ import { updateSudo as update } from '@lblod/mu-auth-sudo';
 import { CREATOR } from '../config';
 
 export default async function sendErrorAlert({message, detail, reference}) {
-  if (!message)
+  if (!message) {
     throw 'ErrorAlert needs at least a message describing what went wrong.';
+  }
+
   const id = uuid();
   const uri = `http://data.lblod.info/errors/${id}`;
-  const q = `
+  const optionalReferenceTriple = reference ? `${sparqlEscapeUri(uri)} dct:references ${sparqlEscapeUri(reference)} .` : '';
+  const optionalDetailTriple = detail ? `${sparqlEscapeUri(uri)} oslc:largePreview ${sparqlEscapeString(detail)} .` : '';
+
+  const createErrorAlertQuery = `
       PREFIX mu:   <http://mu.semte.ch/vocabularies/core/>
       PREFIX oslc: <http://open-services.net/ns/core#>
       PREFIX dct:  <http://purl.org/dc/terms/>
@@ -20,15 +25,17 @@ export default async function sendErrorAlert({message, detail, reference}) {
                     oslc:message ${sparqlEscapeString(message)} ;
                     dct:created ${sparqlEscapeDateTime(new Date().toISOString())} ;
                     dct:creator ${sparqlEscapeUri(CREATOR)} .
-            ${reference ? `${sparqlEscapeUri(uri)} dct:references ${sparqlEscapeUri(reference)} .` : ''}
-            ${detail ? `${sparqlEscapeUri(uri)} oslc:largePreview ""${sparqlEscapeString(detail)}"" .` : ''}
+
+            ${optionalReferenceTriple}
+            ${optionalDetailTriple}
         }
       }
-   `;
+    `;
+
   try {
-    await update(q);
+    await update(createErrorAlertQuery);
     console.log(`Successfully sent out an error-alert.\nMessage: ${message}`);
   } catch (e) {
-    console.warn(`[WARN] Something went wrong while trying to store an error-alert.\nMessage: ${e}\nQuery: ${q}`);
+    console.warn(`[WARN] Something went wrong while trying to store an error-alert.\nMessage: ${e}\nQuery: ${createErrorAlertQuery}`);
   }
 }
