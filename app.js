@@ -1,37 +1,36 @@
 import { app, errorHandler } from 'mu';
-import cron from 'node-cron';
+import scheduleReportTask from './util/schedule-report-task';
 import bodyParser from 'body-parser';
-
 import reports from './reports/index';
 
 // parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({extended: false}));
 
 // parse application/json
 app.use(bodyParser.json());
 
-reports.forEach(({cronPattern, execute}) => {
-  if(cronPattern) {
-    try {
-      cron.schedule(cronPattern, execute);
-    }catch(e){
-      console.log(e);
-    }
-  }
-});
+// schedule report tasks
+try {
+  reports.forEach((report) => {
+    if (report.cronPattern)
+      scheduleReportTask(report);
+  });
+} catch (e) {
+  console.warn(`Something went wrong while scheduling report tasks.\nMessage: ${e}`);
+}
 
 app.post('/reports', async (req, res) => {
   const reportName = req.body.data.attributes.reportName;
-  if(reportName) {
+  if (reportName) {
     let report = reports.find((report) => report.name === reportName);
-    if(report) {
+    if (report) {
       report.execute();
       return res.json({
         data: {
           type: 'report-generation-tasks',
           attributes: {
             status: 'success'
-          } 
+          }
         }
       });
     } else {
@@ -46,7 +45,7 @@ app.post('/reports', async (req, res) => {
         }
       });
     }
-  }else {
+  } else {
     res.status(400);
     return res.json({
       data: {
@@ -60,7 +59,7 @@ app.post('/reports', async (req, res) => {
   }
 });
 
-app.get('/test', async (req, res) => {
+app.get('/', async (req, res) => {
   res.send('Hello World');
 });
 
