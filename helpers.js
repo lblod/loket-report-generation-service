@@ -29,7 +29,7 @@ export async function createFileOnDisk({name, format, size, extension, created, 
     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
 
     INSERT DATA {
-      GRAPH <http://mu.semte.ch/graphs/public> {
+      GRAPH ${sparqlEscapeUri(DEFAULT_GRAPH)} {
         ${sparqlEscapeUri(logicalFileURI)} a nfo:FileDataObject;
           mu:uuid ${sparqlEscapeString(logicalFileUuid)};
           nfo:fileName ${sparqlEscapeString(name)};
