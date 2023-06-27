@@ -1,7 +1,7 @@
 import { app, errorHandler } from 'mu';
 import scheduleReportTask from './util/schedule-report-task';
 import bodyParser from 'body-parser';
-import reports from './reports/index';
+import reports from './config/index';
 
 // parse application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({extended: false}));
