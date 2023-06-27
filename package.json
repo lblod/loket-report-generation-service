@@ -1,6 +1,6 @@
 {
   "name": "loket-report-generation-service",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "main": "app.js",
   "repository": "https://github.com/lblod/loket-report-generation-service",
   "author": "Oscar <lagartoverde97@gmail.com>",
