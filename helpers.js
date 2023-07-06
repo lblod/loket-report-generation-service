@@ -4,14 +4,14 @@ import fs from 'fs';
 
 const DEFAULT_GRAPH = process.env.DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
 const separator = ';';
-const separatorReplacement = ',';
 
 export function generateCSV(fields, data) {
   const headerString = fields.join(separator);
   const csvRows = data.map((row) => {
-    return fields.map((propertyName) =>
-      (row[propertyName] || '').replace(separator, separatorReplacement)
-    ).join(separator);
+    return fields.map((propertyName) => {
+      const dt = row[propertyName] || '';
+      return dt.includes(separator) ? `"${dt}"` : dt;
+    }).join(separator);
   });
   return `${headerString}\n${csvRows.join('\n')}`;
 }
