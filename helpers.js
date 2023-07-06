@@ -4,16 +4,16 @@ import fs from 'fs';
 
 const DEFAULT_GRAPH = process.env.DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
 const separator = ';';
+const separatorReplacement = ',';
+
 export function generateCSV(fields, data) {
-  let result = '';
   const headerString = fields.join(separator);
-  result += `${headerString}\n`;
   const csvRows = data.map((row) => {
-    const dataRow = fields.map((header) => row[header]);
-    return dataRow.join(separator);
+    return fields.map((propertyName) =>
+      (row[propertyName] || '').replace(separator, separatorReplacement)
+    ).join(separator);
   });
-  result += `${csvRows.join('\n')}`;
-  return result;
+  return `${headerString}\n${csvRows.join('\n')}`;
 }
 
 export async function createFileOnDisk({name, format, size, extension, created, location}) {
