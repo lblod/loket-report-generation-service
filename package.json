@@ -3,10 +3,20 @@
   "version": "0.6.3",
   "main": "app.js",
   "repository": "https://github.com/lblod/loket-report-generation-service",
-  "author": "Oscar <lagartoverde97@gmail.com>",
+  "author": "LBLOD",
   "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.32.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "prettier": "^3.0.3"
+  },
   "dependencies": {
     "@lblod/mu-auth-sudo": "^0.6.1",
     "node-cron": "^3.0.2"
+  },
+  "scripts": {
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --cache --fix"
   }
 }
