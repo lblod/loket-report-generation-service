@@ -1,16 +1,23 @@
-import { uuid, sparqlEscapeUri, sparqlEscapeString, sparqlEscapeDateTime } from 'mu';
+import {
+  uuid,
+  sparqlEscapeUri,
+  sparqlEscapeString,
+  sparqlEscapeDateTime,
+} from 'mu';
 import { updateSudo as update } from '@lblod/mu-auth-sudo';
 import { CREATOR } from '../config';
 
-export default async function sendErrorAlert({message, detail, reference}) {
+export default async function sendErrorAlert({ message, detail, reference }) {
   if (!message) {
     throw 'ErrorAlert needs at least a message describing what went wrong.';
   }
 
   const id = uuid();
   const uri = `http://data.lblod.info/errors/${id}`;
-  const optionalReferenceTriple = reference ? `${sparqlEscapeUri(uri)} dct:references ${sparqlEscapeUri(reference)} .` : '';
   const optionalDetailTriple = detail ? `${sparqlEscapeUri(uri)} oslc:largePreview ${sparqlEscapeString(detail)} .` : '';
+  const optionalReferenceTriple = reference
+    ? `${sparqlEscapeUri(uri)} dct:references ${sparqlEscapeUri(reference)} .`
+    : '';
 
   const createErrorAlertQuery = `
       PREFIX mu:   <http://mu.semte.ch/vocabularies/core/>
@@ -36,6 +43,8 @@ export default async function sendErrorAlert({message, detail, reference}) {
     await update(createErrorAlertQuery);
     console.log(`Successfully sent out an error-alert.\nMessage: ${message}`);
   } catch (e) {
-    console.warn(`[WARN] Something went wrong while trying to store an error-alert.\nMessage: ${e}\nQuery: ${createErrorAlertQuery}`);
+    console.warn(
+      `[WARN] Something went wrong while trying to store an error-alert.\nMessage: ${e}\nQuery: ${createErrorAlertQuery}`,
+    );
   }
 }
