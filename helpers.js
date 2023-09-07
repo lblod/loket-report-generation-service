@@ -7,10 +7,16 @@ import {
 } from 'mu';
 import { querySudo as query } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
+import * as env from 'env-var';
 
-const DEFAULT_GRAPH =
-  process.env.DEFAULT_GRAPH ||
-  'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
+const DEFAULT_GRAPH = env
+  .get('DEFAULT_GRAPH')
+  .required()
+  .default(
+    'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin',
+  )
+  .asUrlString();
+
 const separator = ';';
 
 export function generateCSV(fields, data) {

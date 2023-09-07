@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@lblod/mu-auth-sudo": "^0.6.1",
+    "env-var": "^7.4.1",
     "node-cron": "^3.0.2"
   },
   "scripts": {
