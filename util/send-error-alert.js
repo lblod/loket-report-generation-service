@@ -14,30 +14,31 @@ export default async function sendErrorAlert({ message, detail, reference }) {
 
   const id = uuid();
   const uri = `http://data.lblod.info/errors/${id}`;
-  const optionalDetailTriple = detail ? `${sparqlEscapeUri(uri)} oslc:largePreview ${sparqlEscapeString(detail)} .` : '';
   const optionalReferenceTriple = reference
     ? `${sparqlEscapeUri(uri)} dct:references ${sparqlEscapeUri(reference)} .`
     : '';
+  const optionalDetailTriple = detail
+    ? `${sparqlEscapeUri(uri)}
+         oslc:largePreview ${sparqlEscapeString(detail)} .`
+    : '';
 
   const createErrorAlertQuery = `
-      PREFIX mu:   <http://mu.semte.ch/vocabularies/core/>
-      PREFIX oslc: <http://open-services.net/ns/core#>
-      PREFIX dct:  <http://purl.org/dc/terms/>
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    PREFIX oslc: <http://open-services.net/ns/core#>
+    PREFIX dct: <http://purl.org/dc/terms/>
 
-      INSERT DATA {
-        GRAPH <http://mu.semte.ch/graphs/error> {
-            ${sparqlEscapeUri(uri)} a oslc:Error ;
-                    mu:uuid ${sparqlEscapeString(id)} ;
-                    dct:subject ${sparqlEscapeString('Report Generation Service')} ;
-                    oslc:message ${sparqlEscapeString(message)} ;
-                    dct:created ${sparqlEscapeDateTime(new Date().toISOString())} ;
-                    dct:creator ${sparqlEscapeUri(CREATOR)} .
-
-            ${optionalReferenceTriple}
-            ${optionalDetailTriple}
-        }
+    INSERT DATA {
+      GRAPH <http://mu.semte.ch/graphs/error> {
+        ${sparqlEscapeUri(uri)} a oslc:Error ;
+          mu:uuid ${sparqlEscapeString(id)} ;
+          dct:subject ${sparqlEscapeString('Report Generation Service')} ;
+          oslc:message ${sparqlEscapeString(message)} ;
+          dct:created ${sparqlEscapeDateTime(new Date().toISOString())} ;
+          dct:creator ${sparqlEscapeUri(CREATOR)} .
+        ${optionalReferenceTriple}
+        ${optionalDetailTriple}
       }
-    `;
+    }`;
 
   try {
     await update(createErrorAlertQuery);

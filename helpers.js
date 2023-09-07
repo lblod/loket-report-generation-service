@@ -84,7 +84,8 @@ export async function createReport(file, { title, description }) {
 
     INSERT DATA {
       GRAPH ${sparqlEscapeUri(DEFAULT_GRAPH)} {
-        ${sparqlEscapeUri(reportURI)} a <http://lblod.data.gift/vocabularies/reporting/Report>;
+        ${sparqlEscapeUri(reportURI)}
+          a <http://lblod.data.gift/vocabularies/reporting/Report>;
           mu:uuid ${sparqlEscapeString(reportUUID)};
           dct:title ${sparqlEscapeString(title)};
           dct:description ${sparqlEscapeString(description)};
