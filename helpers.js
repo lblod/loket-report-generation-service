@@ -9,8 +9,12 @@ export function generateCSV(fields, data) {
   const headerString = fields.join(separator);
   const csvRows = data.map((row) => {
     return fields.map((propertyName) => {
-      const dt = row[propertyName] || '';
-      return dt.includes(separator) ? `"${dt}"` : dt;
+      let dt = row[propertyName] || '';
+      //Remove unmatched double quotes
+      dt = [...dt.matchAll(/"/g)].length % 2 !== 0 ? dt.replace(/"/g, '') : dt;
+      //Escape the use of the semicolon
+      dt = dt.includes(separator) ? `"${dt}"` : dt;
+      return dt;
     }).join(separator);
   });
   return `${headerString}\n${csvRows.join('\n')}`;
