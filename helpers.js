@@ -5,7 +5,7 @@ import {
   sparqlEscapeDateTime,
   uuid,
 } from 'mu';
-import { querySudo as query } from '@lblod/mu-auth-sudo';
+import { querySudo } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
 import * as env from 'env-var';
 
@@ -76,7 +76,7 @@ export async function createFileOnDisk({
       }
     }
   `;
-  await query(queryString);
+  await querySudo(queryString);
   return logicalFileURI;
 }
 
@@ -100,7 +100,7 @@ export async function createReport(file, { title, description }) {
       }
     }
   `;
-  await query(queryString);
+  await querySudo(queryString);
 }
 
 export async function generateReportFromData(data, attributes, reportInfo) {
@@ -137,7 +137,7 @@ export async function batchedQuery(
       LIMIT ${batchSize}
       OFFSET ${actualIndex}
     `;
-    const data = await query(batchedQueryString);
+    const data = await querySudo(batchedQueryString);
     if (!response) {
       response = data;
     } else {
