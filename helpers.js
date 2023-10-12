@@ -17,10 +17,10 @@ const DEFAULT_GRAPH = env
   )
   .asUrlString();
 
-const separator = ';';
+const SEPARATOR = ';';
 
 export function generateCSV(fields, data) {
-  const headerString = fields.join(separator);
+  const headerString = fields.join(SEPARATOR);
   const csvRows = data.map((row) => {
     return fields
       .map((propertyName) => {
@@ -29,10 +29,10 @@ export function generateCSV(fields, data) {
         dt =
           [...dt.matchAll(/"/g)].length % 2 !== 0 ? dt.replace(/"/g, '') : dt;
         //Escape the use of the semicolon
-        dt = dt.includes(separator) ? `"${dt}"` : dt;
+        dt = dt.includes(SEPARATOR) ? `"${dt}"` : dt;
         return dt;
       })
-      .join(separator);
+      .join(SEPARATOR);
   });
   return `${headerString}\n${csvRows.join('\n')}`;
 }
