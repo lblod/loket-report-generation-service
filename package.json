@@ -1,12 +1,26 @@
 {
   "name": "loket-report-generation-service",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "main": "app.js",
   "repository": "https://github.com/lblod/loket-report-generation-service",
-  "author": "Oscar <lagartoverde97@gmail.com>",
+  "author": "LBLOD",
   "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.32.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "prettier": "^3.0.3"
+  },
   "dependencies": {
     "@lblod/mu-auth-sudo": "^0.6.1",
-    "node-cron": "^3.0.2"
+    "env-var": "^7.4.1",
+    "node-cron": "^3.0.2",
+    "n3": "^1.16.3",
+    "rdf-string-ttl": "^1.3.2",
+    "sparqljson-parse": "^2.1.1"
+  },
+  "scripts": {
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --cache --fix"
   }
 }

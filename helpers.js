@@ -1,26 +1,50 @@
-import { sparqlEscapeUri, sparqlEscapeString, sparqlEscapeInt, sparqlEscapeDateTime, uuid } from 'mu';
-import { querySudo as query } from '@lblod/mu-auth-sudo';
+import {
+  sparqlEscapeUri,
+  sparqlEscapeString,
+  sparqlEscapeInt,
+  sparqlEscapeDateTime,
+  uuid,
+} from 'mu';
+import { querySudo } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
+import * as env from 'env-var';
 
-const DEFAULT_GRAPH = process.env.DEFAULT_GRAPH || 'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin';
-const separator = ';';
+const DEFAULT_GRAPH = env
+  .get('DEFAULT_GRAPH')
+  .required()
+  .default(
+    'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin',
+  )
+  .asUrlString();
+
+const SEPARATOR = ';';
 
 export function generateCSV(fields, data) {
-  const headerString = fields.join(separator);
+  const headerString = fields.join(SEPARATOR);
   const csvRows = data.map((row) => {
-    return fields.map((propertyName) => {
-      let dt = row[propertyName] || '';
-      //Remove unmatched double quotes
-      dt = [...dt.matchAll(/"/g)].length % 2 !== 0 ? dt.replace(/"/g, '') : dt;
-      //Escape the use of the semicolon
-      dt = dt.includes(separator) ? `"${dt}"` : dt;
-      return dt;
-    }).join(separator);
+    return fields
+      .map((propertyName) => {
+        let dt = row[propertyName] || '';
+        //Remove unmatched double quotes
+        dt =
+          [...dt.matchAll(/"/g)].length % 2 !== 0 ? dt.replace(/"/g, '') : dt;
+        //Escape the use of the semicolon
+        dt = dt.includes(SEPARATOR) ? `"${dt}"` : dt;
+        return dt;
+      })
+      .join(SEPARATOR);
   });
   return `${headerString}\n${csvRows.join('\n')}`;
 }
 
-export async function createFileOnDisk({name, format, size, extension, created, location}) {
+export async function createFileOnDisk({
+  name,
+  format,
+  size,
+  extension,
+  created,
+  location,
+}) {
   const logicalFileUuid = uuid();
   const logicalFileURI = `http://data.lblod.info/files/${logicalFileUuid}`;
   const physicalFileUuid = uuid();
@@ -52,11 +76,11 @@ export async function createFileOnDisk({name, format, size, extension, created, 
       }
     }
   `;
-  await query(queryString);
+  await querySudo(queryString);
   return logicalFileURI;
 }
 
-export async function createReport(file, {title, description}) {
+export async function createReport(file, { title, description }) {
   const reportUUID = uuid();
   const reportURI = `http://data.lblod.info/id/reports/${reportUUID}`;
   const queryString = `
@@ -66,7 +90,8 @@ export async function createReport(file, {title, description}) {
 
     INSERT DATA {
       GRAPH ${sparqlEscapeUri(DEFAULT_GRAPH)} {
-        ${sparqlEscapeUri(reportURI)} a <http://lblod.data.gift/vocabularies/reporting/Report>;
+        ${sparqlEscapeUri(reportURI)}
+          a <http://lblod.data.gift/vocabularies/reporting/Report>;
           mu:uuid ${sparqlEscapeString(reportUUID)};
           dct:title ${sparqlEscapeString(title)};
           dct:description ${sparqlEscapeString(description)};
@@ -75,7 +100,7 @@ export async function createReport(file, {title, description}) {
       }
     }
   `;
-  await query(queryString);
+  await querySudo(queryString);
 }
 
 export async function generateReportFromData(data, attributes, reportInfo) {
@@ -91,34 +116,40 @@ export async function generateReportFromData(data, attributes, reportInfo) {
     format: fileFormat,
     created: new Date(fileStats.birthtime),
     size: fileStats.size,
-    location: `${fileName}.${fileExtension}`
+    location: `${fileName}.${fileExtension}`,
   };
   const file = await createFileOnDisk(fileInfo);
   await createReport(file, reportInfo);
 }
 
-export async function batchedQuery(queryString, batchSize=1000, maxNumberOfBatches=null) {
+export async function batchedQuery(
+  queryString,
+  batchSize = 1000,
+  maxNumberOfBatches = null,
+) {
   let moreData = true;
   let actualIndex = 0;
   let response = undefined;
   let iteration = 0;
-  while(moreData) {
+  while (moreData) {
     const batchedQueryString = `
       ${queryString}
       LIMIT ${batchSize}
       OFFSET ${actualIndex}
     `;
-    const data = await query(batchedQueryString);
-    if(!response) {
+    const data = await querySudo(batchedQueryString);
+    if (!response) {
       response = data;
     } else {
-      response.results.bindings = response.results.bindings.concat(data.results.bindings);
+      response.results.bindings = response.results.bindings.concat(
+        data.results.bindings,
+      );
     }
     actualIndex += batchSize;
-    if(data.results.bindings.length < batchSize) {
+    if (data.results.bindings.length < batchSize) {
       moreData = false;
     }
-    if(maxNumberOfBatches  && iteration >= maxNumberOfBatches){
+    if (maxNumberOfBatches && iteration >= maxNumberOfBatches) {
       moreData = false;
     }
     ++iteration;

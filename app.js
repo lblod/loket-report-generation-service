@@ -4,7 +4,7 @@ import bodyParser from 'body-parser';
 import reports from './config/index';
 
 // parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({extended: false}));
+app.use(bodyParser.urlencoded({ extended: false }));
 
 // parse application/json
 app.use(bodyParser.json());
@@ -12,11 +12,12 @@ app.use(bodyParser.json());
 // schedule report tasks
 try {
   reports.forEach((report) => {
-    if (report.cronPattern)
-      scheduleReportTask(report);
+    if (report.cronPattern) scheduleReportTask(report);
   });
 } catch (e) {
-  console.warn(`Something went wrong while scheduling report tasks.\nMessage: ${e}`);
+  console.warn(
+    `Something went wrong while scheduling report tasks.\nMessage: ${e}`,
+  );
 }
 
 app.post('/reports', async (req, res) => {
@@ -29,9 +30,9 @@ app.post('/reports', async (req, res) => {
         data: {
           type: 'report-generation-tasks',
           attributes: {
-            status: 'success'
-          }
-        }
+            status: 'success',
+          },
+        },
       });
     } else {
       res.status(404);
@@ -40,9 +41,9 @@ app.post('/reports', async (req, res) => {
           type: 'report-generation-tasks',
           attributes: {
             status: 'error',
-            info: `There's no report named ${reportName}`
-          }
-        }
+            info: `There's no report named ${reportName}`,
+          },
+        },
       });
     }
   } else {
@@ -52,9 +53,9 @@ app.post('/reports', async (req, res) => {
         type: 'report-generation-tasks',
         attributes: {
           status: 'error',
-          info: 'No report name specified in the request'
-        }
-      }
+          info: 'No report name specified in the request',
+        },
+      },
     });
   }
 });
