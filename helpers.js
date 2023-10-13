@@ -5,7 +5,7 @@ import {
   sparqlEscapeDateTime,
   uuid,
 } from 'mu';
-import { querySudo as query } from '@lblod/mu-auth-sudo';
+import { querySudo } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
 import * as env from 'env-var';
 
@@ -17,10 +17,10 @@ const DEFAULT_GRAPH = env
   )
   .asUrlString();
 
-const separator = ';';
+const SEPARATOR = ';';
 
 export function generateCSV(fields, data) {
-  const headerString = fields.join(separator);
+  const headerString = fields.join(SEPARATOR);
   const csvRows = data.map((row) => {
     return fields
       .map((propertyName) => {
@@ -29,10 +29,10 @@ export function generateCSV(fields, data) {
         dt =
           [...dt.matchAll(/"/g)].length % 2 !== 0 ? dt.replace(/"/g, '') : dt;
         //Escape the use of the semicolon
-        dt = dt.includes(separator) ? `"${dt}"` : dt;
+        dt = dt.includes(SEPARATOR) ? `"${dt}"` : dt;
         return dt;
       })
-      .join(separator);
+      .join(SEPARATOR);
   });
   return `${headerString}\n${csvRows.join('\n')}`;
 }
@@ -76,7 +76,7 @@ export async function createFileOnDisk({
       }
     }
   `;
-  await query(queryString);
+  await querySudo(queryString);
   return logicalFileURI;
 }
 
@@ -100,7 +100,7 @@ export async function createReport(file, { title, description }) {
       }
     }
   `;
-  await query(queryString);
+  await querySudo(queryString);
 }
 
 export async function generateReportFromData(data, attributes, reportInfo) {
@@ -137,7 +137,7 @@ export async function batchedQuery(
       LIMIT ${batchSize}
       OFFSET ${actualIndex}
     `;
-    const data = await query(batchedQueryString);
+    const data = await querySudo(batchedQueryString);
     if (!response) {
       response = data;
     } else {
