@@ -7,15 +7,7 @@ import {
 } from 'mu';
 import { querySudo } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
-import * as env from 'env-var';
-
-const DEFAULT_GRAPH = env
-  .get('DEFAULT_GRAPH')
-  .required()
-  .default(
-    'http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin',
-  )
-  .asUrlString();
+import { DEFAULT_GRAPH, ONLY_KEEP_LATEST_REPORT } from './config';
 
 const SEPARATOR = ';';
 
@@ -120,6 +112,89 @@ export async function generateReportFromData(data, attributes, reportInfo) {
   };
   const file = await createFileOnDisk(fileInfo);
   await createReport(file, reportInfo);
+
+  if (ONLY_KEEP_LATEST_REPORT) {
+    await deletePreviousReports(reportInfo);
+  }
+}
+
+async function deletePreviousReports(reportInfo) {
+  const reportsToDelete = await getPreviousReports(reportInfo.title);
+
+  for (const report of reportsToDelete) {
+    await deleteFileInDatabase(report.uri);
+    await deleteFileOnDisk(report.physicalFile);
+  }
+}
+
+async function getPreviousReports(title) {
+  const queryString = `
+    PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX prov: <http://www.w3.org/ns/prov#>
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
+
+    SELECT ?reportUri ?physicalFile
+    WHERE {
+      GRAPH ${sparqlEscapeUri(DEFAULT_GRAPH)} {
+        ?reportUri a <http://lblod.data.gift/vocabularies/reporting/Report>;
+          dct:title ${sparqlEscapeString(title)};
+          dct:created ?created;
+          prov:generated ?file .
+
+        ?physicalFile nie:dataSource ?file .
+      }
+    }
+    ORDER BY DESC(?created)
+  `;
+  const result = await querySudo(queryString);
+
+  if (result.results.bindings.length) {
+    const reports = result.results.bindings.map((o) => {
+      return {
+        uri: o.reportUri.value,
+        physicalFile: o.physicalFile.value,
+      };
+    });
+    reports.shift(); // Most recent report should stay away from being deleted
+    return reports;
+  } else {
+    return [];
+  }
+}
+
+async function deleteFileInDatabase(uri) {
+  const queryString = `
+    PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX prov: <http://www.w3.org/ns/prov#>
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    PREFIX nie: <http://www.semanticdesktop.org/ontologies/2007/01/19/nie#>
+
+    DELETE WHERE {
+      GRAPH ${sparqlEscapeUri(DEFAULT_GRAPH)} {
+        ${sparqlEscapeUri(uri)} prov:generated ?file ;
+          ?preport ?oreport .
+
+        ?file ?pfile ?ofile .
+
+        ?physicalFile nie:dataSource ?file ;
+          ?pphysicalFile ?ophysicalFile .
+      }
+    }
+  `;
+  await querySudo(queryString);
+}
+
+async function deleteFileOnDisk(path) {
+  try {
+    const filePath = path.replace('share://', '/share/');
+    fs.unlink(filePath, function () {
+      console.log('Deleted file', filePath);
+    });
+  } catch (error) {
+    console.warn(`Error removing file ${path}`);
+    console.error(`${error?.message || error}`);
+  }
 }
 
 export async function batchedQuery(
