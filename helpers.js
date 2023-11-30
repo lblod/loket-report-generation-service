@@ -108,7 +108,14 @@ export async function generateReportFromData(data, attributes, reportInfo) {
   const fileExtension = 'csv';
   const fileFormat = 'text/csv';
   const csv = generateCSV(attributes, data);
-  fs.writeFileSync(`/share/${fileName}.${fileExtension}`, csv);
+  const filePath = `/share/${fileName}.${fileExtension}`;
+  let outputDirectory = filePath.split('/');
+  outputDirectory.pop();
+  outputDirectory = outputDirectory.join('/');
+
+  fs.mkdirSync(outputDirectory, { recursive: true });
+  fs.writeFileSync(filePath, csv);
+
   const fileStats = fs.statSync(`/share/${fileName}.${fileExtension}`);
   const fileInfo = {
     name: fileName,
