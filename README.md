@@ -22,6 +22,11 @@ written to. The path is important because it is related to the file info
 written to the database. The other volume, mounted to `/config` is where the
 report code will be (the `index.js` file, see below).
 
+## Environment variables
+
+The following enviroment variables can be configured:
+* `DEFAULT_GRAPH`: Default graph in which the file will be stored in the db. Defaults to `http://mu.semte.ch/graphs/organizations/141d9d6b-54af-4d17-b313-8d1c30bc3f5b/LoketAdmin`
+* `ONLY_KEEP_LATEST_REPORT`: Boolean that allows, when set to `true`, to only keep the most recent version of a report during its creation and to delete oder versions. Defaults to `false`
 
 ## Defining reports
 
