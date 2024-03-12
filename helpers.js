@@ -17,11 +17,13 @@ export function generateCSV(fields, data) {
     return fields
       .map((propertyName) => {
         let dt = row[propertyName] || '';
-        //Remove unmatched double quotes
-        dt =
-          [...dt.matchAll(/"/g)].length % 2 !== 0 ? dt.replace(/"/g, '') : dt;
+        //Escape the use of double quotes by prepending a quote
+        dt = dt.replace(/"/g, '""');
         //Escape the use of the semicolon
         dt = dt.includes(SEPARATOR) ? `"${dt}"` : dt;
+        //Escape newlines and tabs
+        dt = dt.replace(/\n/g, '\\n');
+        dt = dt.replace(/\t/g, '\\t');
         return dt;
       })
       .join(SEPARATOR);
