@@ -41,16 +41,18 @@ import BestuurseenhedenReport from './bestuurseenhedenReport'
 import BerichtencentrumMessagesReport from './berichtencentrumMessages'
 import InzendingenReport from './inzendingenReport'
 import AccountReport from './accountReport'
+import ShaclReport from './shaclReport'
 
 export default [
   BestuurseenhedenReport,
   BerichtencentrumMessagesReport,
   InzendingenReport,
   AccountReport,
+  ShaclReport
 ];
 ```
 
-This file imports 4 reports from the same directory and exports an array
+This file imports 5 reports from the same directory and exports an array
 containing all of them.
 
 ### Reports
@@ -123,6 +125,84 @@ export default {
       typeCount: inzendingen.typeCount.value,
     }));
     await generateReportFromData(data, ['type', 'typeCount'], reportData);
+  },
+};
+```
+
+### Example SHACL Report
+
+Example of a SHACL report file that reads 100 triples of Mandatarissen and runs a SHACL shape against each Mandataris:
+
+```js
+import { querySudo } from '@lblod/mu-auth-sudo';
+
+import { parseTurtleString, convertConstructQueryResponseToStore, validateDataset } from '../helpers.js';
+
+export default {
+  cronPattern: '0 0 * * *',
+  name: 'shaclReport',
+  execute: async () => {
+    const reportData = {
+      title: 'Shacl Report',
+      description: 'Example of validating Mandatarissen with SHACL shape',
+      filePrefix: 'shacl',
+    };
+    
+    const queryString = `
+      CONSTRUCT {
+        ?mandataris ?pMandataris ?oMandataris .
+      }
+      WHERE {
+        ?mandataris a <http://data.vlaanderen.be/ns/mandaat#Mandataris> ;
+                  ?pMandataris ?oMandataris .     
+      }
+      LIMIT 100
+      `;
+    const queryResponse = await querySudo(queryString);
+    const dataset = convertConstructQueryResponseToStore(queryResponse);
+
+    const shape = `
+      @prefix sh: <http://www.w3.org/ns/shacl#> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+      <http://example.org/shape>
+      a sh:NodeShape ;
+      sh:targetClass <http://data.vlaanderen.be/ns/mandaat#Mandataris> ;
+      sh:prefixes [ sh:declare [
+        a sh:PrefixDeclaration ;
+        sh:namespace "http://data.vlaanderen.be/ns/mandaat#"^^xsd:anyURI ;
+        sh:prefix "mandaat" ;
+      ] ];
+      sh:property [
+        sh:name "isBestuurlijkeAliasVan" ;
+        sh:description "De persoon die de mandatarisrol vervult." ;
+        sh:path <http://data.vlaanderen.be/ns/mandaat#isBestuurlijkeAliasVan> ;
+        sh:class <http://www.w3.org/ns/person#Person> ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+      ] ;
+      sh:sparql [
+        sh:select """
+          PREFIX mandaat: <http://data.vlaanderen.be/ns/mandaat#>
+
+          SELECT $this ?value
+          WHERE {
+              $this a mandaat:Mandataris .
+              FILTER NOT EXISTS {
+                  $this mandaat:status ?mandatarisStatusCode .
+              }
+          
+              BIND ("You can include variables here for feedback." as ?value)
+          }
+        """ ;
+        sh:message "Mandataris heeft geen status."
+      ] .
+    `;
+    const shapesDataset = await parseTurtleString(shape);
+
+    const report = await validateDataset(dataset, shapesDataset);
+
+    console.log(report.dataset); // returns RDF/JS Store
   },
 };
 ```

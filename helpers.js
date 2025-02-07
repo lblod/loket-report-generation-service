@@ -9,6 +9,11 @@ import { querySudo } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
 import { DEFAULT_GRAPH, ONLY_KEEP_LATEST_REPORT } from './config';
 
+import { SparqlJsonParser } from 'sparqljson-parse';
+const sparqlJsonParser = new SparqlJsonParser();
+
+import { Parser, Store } from 'n3';
+
 const SEPARATOR = ';';
 
 export function generateCSV(fields, data) {
@@ -242,4 +247,47 @@ export async function batchedQuery(
     ++iteration;
   }
   return response;
+}
+
+// Function to validate a dataset using a SHACL shape
+export async function validateDataset(dataset, shapesDataset) {
+  // Import ESM modules dynamically
+  const rdf = await eval('import("rdf-ext")');
+  const shacl = await eval('import("shacl-engine")');
+  const sparqljs = await eval('import("shacl-engine/sparql.js")');
+
+  const validator = new shacl.Validator(shapesDataset, {
+    factory: rdf.default,
+    validations: sparqljs.validations,
+  });
+  const report = await validator.validate({ dataset: dataset });
+
+  return report;
+}
+
+export function convertConstructQueryResponseToStore(response) {
+  const rdfJsObjects = sparqlJsonParser.parseJsonResults(response);
+
+  const store = new Store();
+
+  rdfJsObjects.forEach((quad) => {
+    store.addQuad(
+      quad.s,
+      quad.p,
+      quad.o,
+      quad.g || undefined, // Optional: Include a graph if your RDFJS object contains it
+    );
+  });
+
+  return store;
+}
+
+export async function parseTurtleString(turtleString) {
+  const parser = new Parser();
+  const store = new Store();
+
+  const quads = parser.parse(turtleString);
+  store.addQuads(quads);
+
+  return store;
 }
