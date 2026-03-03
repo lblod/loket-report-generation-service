@@ -15,3 +15,20 @@ export const ONLY_KEEP_LATEST_REPORT = env
   .get('ONLY_KEEP_LATEST_REPORT')
   .default('false')
   .asBool();
+
+export const INSERT_BATCH_SIZE = env
+  .get('INSERT_BATCH_SIZE')
+  .default('100')
+  .asIntPositive();
+
+export const DIRECT_DATABASE_CONNECTION = env
+  .get('DIRECT_DATABASE_CONNECTION')
+  .required()
+  .default('http://virtuoso:8890/sparql')
+  .asUrlString();
+
+export const MU_SPARQL_ENDPOINT = env
+  .get('MU_SPARQL_ENDPOINT')
+  .required()
+  .default('http://database:8890/sparql')
+  .asUrlString();

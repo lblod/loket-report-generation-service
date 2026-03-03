@@ -5,14 +5,25 @@ import {
   sparqlEscapeDateTime,
   uuid,
 } from 'mu';
-import { querySudo } from '@lblod/mu-auth-sudo';
+import { querySudo, updateSudo } from '@lblod/mu-auth-sudo';
 import fs from 'fs';
-import { DEFAULT_GRAPH, ONLY_KEEP_LATEST_REPORT } from './config';
+import {
+  DEFAULT_GRAPH,
+  ONLY_KEEP_LATEST_REPORT,
+  INSERT_BATCH_SIZE,
+  MU_SPARQL_ENDPOINT,
+  DIRECT_DATABASE_CONNECTION,
+} from './config';
+import { DataFactory } from 'n3';
+const { quad, literal, namedNode } = DataFactory;
 
 import { SparqlJsonParser } from 'sparqljson-parse';
 const sparqlJsonParser = new SparqlJsonParser();
 
-import { Parser, Store } from 'n3';
+import { Parser, Store, Writer } from 'n3';
+
+import { readdir, readFile } from 'fs/promises';
+import path from 'path';
 
 const SEPARATOR = ';';
 
@@ -265,10 +276,8 @@ export async function validateDataset(dataset, shapesDataset) {
   return report;
 }
 
-export function convertConstructQueryResponseToStore(response) {
+export function addConstructQueryResponseToStore(store, response) {
   const rdfJsObjects = sparqlJsonParser.parseJsonResults(response);
-
-  const store = new Store();
 
   rdfJsObjects.forEach((quad) => {
     store.addQuad(
@@ -286,8 +295,803 @@ export async function parseTurtleString(turtleString) {
   const parser = new Parser();
   const store = new Store();
 
+  if (!turtleString || turtleString.trim() === '') {
+    return store; // Return an empty store if the input string is empty or only contains whitespace
+  }
   const quads = parser.parse(turtleString);
   store.addQuads(quads);
 
   return store;
+}
+
+/**
+ * Reads files from directory and merges all content into a single string
+ * Each file content is separated with a newline
+ *
+ * @async
+ * @function
+ * @returns { string } The merged content of all files in the directory
+ */
+export async function mergeFilesContent(directory) {
+  try {
+    const files = await readdir(directory);
+
+    if (files.length === 0) {
+      console.log('No files found in the directory.');
+      return;
+    }
+
+    // Loop over files and read their contents
+    const contentPromises = files.map(async (file) => {
+      const filePath = path.join(directory, file);
+      return readFile(filePath, 'utf8');
+    });
+
+    // Wait for all file contents to be read
+    const contents = await Promise.all(contentPromises);
+
+    // Merge all content into a single field
+    const mergedContent = contents.join('\n');
+    return mergedContent;
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+  }
+}
+
+/**
+ * Enrich validation report with lmb:targetClassOfFocusNode, adds UUIDs, replaces blank nodes
+ *
+ * @async
+ * @function
+ * @param { N3.Store } reportDataset - Store containing the SHACL Report to enrich
+ * @param { N3.Store } shapesDataset - Store containing the SHACL shapes
+ * @param { N3.Store } dataDataset - Store containing the data that is validated
+ * @returns { object } An object which include the `reportUri` and `reportDataset` keys
+ */
+export function enrichValidationReport(
+  reportDataset,
+  shapesDataset,
+  dataDataset,
+) {
+  const validationResults = reportDataset.match(
+    null,
+    namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+    namedNode('http://www.w3.org/ns/shacl#ValidationResult'),
+  );
+  for (const validationResultQuad of validationResults) {
+    // Retrieve targetClass of ValidationResult using the targetClass of the shape or type of instance
+    const sourceShapeQuads = reportDataset.match(
+      validationResultQuad.subject,
+      namedNode('http://www.w3.org/ns/shacl#sourceShape'),
+      null,
+    );
+    if (!sourceShapeQuads.size)
+      throw new Error('No source shape found on validation result');
+    const [sourceShapeQuad] = sourceShapeQuads;
+    const targetClassInShapeQuads = shapesDataset.match(
+      sourceShapeQuad.object,
+      namedNode('http://www.w3.org/ns/shacl#targetClass'),
+      null,
+    );
+    let targetClassQuad;
+    let targetIdQuad;
+    const focusNodeQuads = reportDataset.match(
+      validationResultQuad.subject,
+      namedNode('http://www.w3.org/ns/shacl#focusNode'),
+      null,
+    );
+    if (!targetClassInShapeQuads.size) {
+      // Fallback by searching the class of the focus node in the dataset
+      if (!focusNodeQuads.size) {
+        throw new Error(
+          'No focus node found in validation result as fallback to retrieve targetClass',
+        );
+      }
+      const [focusNodeQuad] = focusNodeQuads;
+
+      const focusNodeTypeInDatasetQuads = dataDataset.match(
+        focusNodeQuad.object,
+        namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+        null,
+      );
+      if (!focusNodeTypeInDatasetQuads.size) {
+        throw new Error(
+          'No type of focus node found in validation result as fallback to retrieve targetClass',
+        );
+      }
+      [targetClassQuad] = focusNodeTypeInDatasetQuads;
+    } else {
+      [targetClassQuad] = targetClassInShapeQuads;
+    }
+
+    // Do not include triples of validation result when ClassConstraintComponent
+    const isClassConstraintComponent =
+      reportDataset.match(
+        validationResultQuad.subject,
+        namedNode('http://www.w3.org/ns/shacl#sourceConstraintComponent'),
+        namedNode('http://www.w3.org/ns/shacl#ClassConstraintComponent'),
+      ).size > 0;
+
+    // Replace blank node of ValidationResult with UUID-based URI
+    const validationResultUUID = uuid();
+    const validationResultURI = `http://data.lblod.info/id/validationresults/${validationResultUUID}`;
+
+    if (focusNodeQuads.size) {
+      const [focusNodeQuad] = focusNodeQuads;
+      [targetIdQuad] = dataDataset.match(
+        focusNodeQuad.object,
+        namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+        null,
+      );
+      if (targetIdQuad) {
+        reportDataset.add(
+          quad(
+            validationResultQuad.subject,
+            namedNode(
+              'http://lblod.data.gift/vocabularies/lmb/targetIdOfFocusNode',
+            ),
+            targetIdQuad.object,
+          ),
+        );
+      }
+    }
+
+    // Add targetClass to validation result
+    if (!isClassConstraintComponent)
+      reportDataset.add(
+        quad(
+          validationResultQuad.subject,
+          namedNode(
+            'http://lblod.data.gift/vocabularies/lmb/targetClassOfFocusNode',
+          ),
+          namedNode(targetClassQuad.object.value),
+        ),
+      );
+    // Add UUID
+    if (!isClassConstraintComponent)
+      reportDataset.add(
+        quad(
+          validationResultQuad.subject,
+          namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+          literal(validationResultUUID),
+        ),
+      );
+
+    const triplesOfValidationResult = reportDataset.match(
+      validationResultQuad.subject,
+      null,
+      null,
+    );
+    for (const resultQuad of triplesOfValidationResult) {
+      if (resultQuad.object.termType != 'BlankNode') {
+        if (!isClassConstraintComponent)
+          reportDataset.add(
+            quad(
+              namedNode(validationResultURI),
+              resultQuad.predicate,
+              resultQuad.object,
+            ),
+          );
+      }
+      // Remove blank node
+      reportDataset.delete(
+        quad(
+          validationResultQuad.subject,
+          resultQuad.predicate,
+          resultQuad.object,
+        ),
+      );
+    }
+
+    const triplesPointingToValidationResult = reportDataset.match(
+      null,
+      null,
+      validationResultQuad.subject,
+    );
+    for (const resultQuad of triplesPointingToValidationResult) {
+      if (!isClassConstraintComponent)
+        reportDataset.add(
+          quad(
+            resultQuad.subject,
+            resultQuad.predicate,
+            namedNode(validationResultURI),
+          ),
+        );
+      // Remove blank node
+      reportDataset.delete(
+        quad(
+          resultQuad.subject,
+          resultQuad.predicate,
+          validationResultQuad.subject,
+        ),
+      );
+    }
+  }
+
+  // Replace blank node of ValidationReport with UUID-based URI
+  const validationReports = reportDataset.match(
+    null,
+    namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+    namedNode('http://www.w3.org/ns/shacl#ValidationReport'),
+  );
+  let reportUri = null;
+  for (const validationReportQuad of validationReports) {
+    const reportUUID = uuid();
+    const reportURI = `http://data.lblod.info/id/reports/${reportUUID}`;
+    reportUri = reportURI;
+    const reportCreatedAt = new Date().toISOString();
+    const triplesOfValidationReport = reportDataset.match(
+      validationReportQuad.subject,
+      null,
+      null,
+    );
+    for (const resultQuad of triplesOfValidationReport) {
+      reportDataset.add(
+        quad(namedNode(reportURI), resultQuad.predicate, resultQuad.object),
+      );
+      // Add UUID
+      reportDataset.add(
+        quad(
+          namedNode(reportURI),
+          namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+          literal(reportUUID),
+        ),
+      );
+      // Add creation time stamp
+      reportDataset.add(
+        quad(
+          namedNode(reportURI),
+          namedNode('http://purl.org/dc/terms/created'),
+          literal(
+            reportCreatedAt,
+            namedNode('http://www.w3.org/2001/XMLSchema#dateTime'),
+          ),
+        ),
+      );
+
+      // Remove blank node
+      reportDataset.delete(
+        quad(
+          validationReportQuad.subject,
+          resultQuad.predicate,
+          resultQuad.object,
+        ),
+      );
+    }
+  }
+  return { reportUri, reportDataset };
+}
+
+/**
+ * Inserts the given dataset into the specified named graphs, requires that the graphs are ext:ownedBy someone
+ *
+ * @async
+ * @function
+ * @param { N3.Store } dataset - Store containing the SHACL Report to enrich
+ * @param { string[] } namedGraphs - Array of named graphs to save the dataset to
+ * @param { boolean } mustBeOwnedBySomeone - Whether the named graphs should be filtered to only include graphs that are ext:ownedBy someone
+ * @returns { void }
+ */
+export async function saveDatasetToNamedGraphs(
+  dataset,
+  namedGraphs,
+  mustBeOwnedBySomeone = false,
+) {
+  const insertBatch = async (batch) => {
+    let mustBeOwnedBySomeoneSparqlString = '';
+    if (mustBeOwnedBySomeone) {
+      mustBeOwnedBySomeoneSparqlString = '?g ext:ownedBy ?someone .';
+    }
+    const ttl = await quadsToTtl(batch);
+    await updateSudo(`
+        PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
+
+        INSERT {
+            GRAPH ?g {
+                ${ttl}
+            }
+        } WHERE {
+          VALUES ?g {
+            ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
+          }
+          ${mustBeOwnedBySomeoneSparqlString}
+        }`);
+  };
+  await handleQuadsInBatch(dataset, INSERT_BATCH_SIZE, insertBatch);
+}
+
+async function handleQuadsInBatch(quads, batchSize, callback) {
+  let batch = [];
+  for (const quad of quads) {
+    batch.push(quad);
+    if (batch.length >= batchSize) {
+      await callback(batch);
+      batch = [];
+    }
+  }
+  if (batch.length > 0) {
+    await callback(batch);
+  }
+}
+
+/**
+ * Returns string in N-Triples format from N3 Quads.
+ *
+ * @async
+ * @function
+ * @param { N3.Quad } quads - Array of N3 Quads to convert to N-Triples format
+ * @returns { string } The N-Triples representation of the given quads
+ */
+export async function quadsToTtl(quads) {
+  const result = new Promise((resolve, reject) => {
+    const writer = new Writer({ format: 'N-Triples' });
+    writer.addQuads(quads);
+    writer.end((error, result) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+  return result;
+}
+
+/**
+ * Deletes all SHACL validation reports in the specified named graphs except the most recent one
+ *
+ * @async
+ * @function
+ * @param { string[] } namedGraphs - Array of named graphs to delete SHACL validation reports from
+ * @returns { void }
+ */
+export async function deletePreviousShaclValidationReports(namedGraphs) {
+  const queryString = `
+    PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX sh: <http://www.w3.org/ns/shacl#>
+
+    SELECT DISTINCT ?reportUri
+    WHERE {
+        VALUES ?g {
+          ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
+        }
+        GRAPH ?g {
+            ?reportUri a sh:ValidationReport ;
+                dct:created ?created .
+        }
+    }
+    ORDER BY DESC(?created)
+  `;
+
+  const response = await querySudo(queryString);
+
+  if (response.results.bindings.length) {
+    response.results.bindings.shift(); // don't remove latest report
+    for (const binding of response.results.bindings) {
+      await deleteShaclValidationReportInDatabase(
+        binding.reportUri.value,
+        namedGraphs,
+      );
+    }
+    console.log('All reports deleted');
+  }
+}
+
+async function deleteShaclValidationReportInDatabase(reportUri, namedGraphs) {
+  // done in two parts because single query confuses db because of join result set explosion
+  const queryDeleteResults = `
+    PREFIX sh: <http://www.w3.org/ns/shacl#>
+
+    DELETE {
+      GRAPH ?g {
+        ?result ?presult ?oresult .
+      }
+    }
+    WHERE {
+      VALUES ?g {
+        ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
+      }
+      GRAPH ?g {
+        ${sparqlEscapeUri(reportUri)} sh:result ?result .
+
+        ?result ?presult ?oresult .
+      }
+    }
+  `;
+  await querySudo(queryDeleteResults);
+  const queryString = `
+        PREFIX sh: <http://www.w3.org/ns/shacl#>
+
+        DELETE {
+          GRAPH ?g {
+            ${sparqlEscapeUri(reportUri)} ?preport ?oreport .
+          }
+        }
+        WHERE {
+          VALUES ?g {
+            ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
+          }
+          GRAPH ?g {
+            ${sparqlEscapeUri(reportUri)} ?preport ?oreport .
+          }
+        }
+    `;
+  await querySudo(queryString);
+}
+
+/**
+ * Get SPARQL validation shapes from the given shapes dataset and return an object containing query, message and shape URI for each shape
+ *
+ * @async
+ * @function
+ * @param { N3.Store } shapesDataset - N3.Store containing the SHACL shapes to retrieve SPARQL validation shapes from
+ * @returns { Object } An object containing query, message en shape URI for each SPARQL validation shape found in the shapes dataset
+ */
+export async function getSparqlValidationObjects(shapesDataset) {
+  const shapes = shapesDataset
+    .getSubjects(
+      namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+      namedNode('http://mu.semte.ch/vocabularies/ext/SparqlShape'),
+    )
+    .map((subject) => subject.value);
+  console.log(`Found ${shapes.length} sparql shapes`);
+  const sparqlShapes = {};
+  shapes.forEach((shapeSubject) => {
+    try {
+      const sparql = shapesDataset.getQuads(
+        shapeSubject,
+        namedNode('http://www.w3.org/ns/shacl#sparql'),
+        null,
+        null,
+      )[0];
+      const query = shapesDataset.getQuads(
+        sparql.object,
+        namedNode('http://www.w3.org/ns/shacl#select'),
+        null,
+        null,
+      )[0].object.value;
+      const message = shapesDataset.getQuads(
+        sparql.object,
+        namedNode('http://www.w3.org/ns/shacl#message'),
+        null,
+        null,
+      )[0].object.value;
+      sparqlShapes[shapeSubject] = {
+        query: query,
+        message: message,
+        uri: shapeSubject,
+      };
+    } catch (e) {
+      console.error(
+        `Error while processing SPARQL shape ${shapeSubject}: ${e}`,
+      );
+    }
+  });
+
+  return sparqlShapes;
+}
+
+/**
+ * Runs the shapes with SPARQL queries on the dataset and adds the results to the report dataset.
+ *
+ * @async
+ * @function
+ * @param { N3.Store } dataDataset - N3.Store containing the data that is validated
+ * @param { N3.Store } reportDataset - N3.Store containing the SHACL validation report to be updated with SPARQL validation results
+ * @param { Object[] } sparqlValidationObjects - An array of objects containing the shape URI as key and object as value containing target, message and value keys
+ * @returns { void }
+ */
+export async function addSparqlValidationsToReport(
+  dataDataset,
+  reportDataset,
+  sparqlValidationObjects,
+) {
+  const graph = await loadDatasetToTempGraph(dataDataset);
+  try {
+    const results = await runSparqlValidations(graph, sparqlValidationObjects);
+    await addShaclResultsToReport(results, reportDataset, dataDataset);
+  } catch (e) {
+    console.error(`Error while running SPARQL validations: ${e}`);
+  }
+  await dropTempGraph(graph);
+}
+
+async function runSparqlValidations(graph, sparqlValidationObjects) {
+  const validationResults = {};
+  for (const sparqlValidationObject of Object.values(sparqlValidationObjects)) {
+    const insertPos = sparqlValidationObject.query
+      .toLowerCase()
+      .indexOf('where');
+    const query =
+      sparqlValidationObject.query.substring(0, insertPos) +
+      `FROM <${graph}>\n` +
+      sparqlValidationObject.query.substring(insertPos);
+    const result = await querySudo(
+      query,
+      {},
+      { sparqlEndpoint: MU_SPARQL_ENDPOINT },
+    );
+    if (result?.results?.bindings && result.results.bindings.length > 0) {
+      validationResults[sparqlValidationObject.uri] = [];
+      result.results.bindings.forEach((binding) => {
+        validationResults[sparqlValidationObject.uri].push({
+          target: binding.this.value,
+          value: binding.value?.value,
+          message: sparqlValidationObject.message,
+        });
+      });
+    }
+  }
+
+  return validationResults;
+}
+
+async function addShaclResultsToReport(
+  validationResults,
+  reportDataset,
+  dataDataset,
+) {
+  const [reportUri] = reportDataset.match(
+    null,
+    namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+    namedNode('http://www.w3.org/ns/shacl#ValidationReport'),
+    null,
+  );
+
+  Object.keys(validationResults).forEach((validationUri) => {
+    const errors = validationResults[validationUri];
+    errors.forEach((error) => {
+      const id = uuid();
+      const errorUri = `http://data.lblod.info/id/validationresults/${id}`;
+      const targetClass = dataDataset.match(
+        namedNode(error.target),
+        namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+        null,
+        null,
+      );
+      if (targetClass.size) {
+        const [targetClassQuad] = targetClass;
+        reportDataset.add(
+          quad(
+            namedNode(errorUri),
+            namedNode(
+              'http://lblod.data.gift/vocabularies/lmb/targetClassOfFocusNode',
+            ),
+            namedNode(targetClassQuad.object.value),
+          ),
+        );
+      }
+      const targetId = dataDataset.match(
+        namedNode(error.target),
+        namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+        null,
+        null,
+      );
+      if (targetId.size) {
+        const [targetIdQuad] = targetId;
+        reportDataset.add(
+          quad(
+            namedNode(errorUri),
+            namedNode(
+              'http://lblod.data.gift/vocabularies/lmb/targetIdOfFocusNode',
+            ),
+            literal(targetIdQuad.object.value),
+          ),
+        );
+      }
+      reportDataset.add(
+        quad(
+          reportUri.subject,
+          namedNode('http://www.w3.org/ns/shacl#result'),
+          namedNode(errorUri),
+        ),
+      );
+      reportDataset.add(
+        quad(
+          namedNode(errorUri),
+          namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+          namedNode('http://www.w3.org/ns/shacl#ValidationResult'),
+        ),
+      );
+      reportDataset.add(
+        quad(
+          namedNode(errorUri),
+          namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+          literal(id),
+        ),
+      );
+
+      if (error.message) {
+        reportDataset.add(
+          quad(
+            namedNode(errorUri),
+            namedNode('http://www.w3.org/ns/shacl#resultMessage'),
+            literal(error.message),
+          ),
+        );
+      }
+      reportDataset.add(
+        quad(
+          namedNode(errorUri),
+          namedNode('http://www.w3.org/ns/shacl#focusNode'),
+          namedNode(error.target),
+        ),
+      );
+      reportDataset.add(
+        quad(
+          namedNode(errorUri),
+          namedNode('http://www.w3.org/ns/shacl#sourceShape'),
+          namedNode(validationUri),
+        ),
+      );
+      reportDataset.add(
+        quad(
+          namedNode(errorUri),
+          namedNode('http://www.w3.org/ns/shacl#sourceConstraintComponent'),
+          namedNode(validationUri),
+        ),
+      );
+      if (error.value) {
+        reportDataset.add(
+          quad(
+            namedNode(errorUri),
+            namedNode('http://www.w3.org/ns/shacl#value'),
+            literal(error.value),
+          ),
+        );
+      }
+      reportDataset.add(
+        quad(
+          namedNode(errorUri),
+          namedNode('http://www.w3.org/ns/shacl#resultSeverity'),
+          namedNode('http://www.w3.org/ns/shacl#Error'),
+        ),
+      );
+    });
+  });
+}
+
+async function dropTempGraph(graph) {
+  await querySudo(
+    `DROP SILENT GRAPH <${graph}>`,
+    {},
+    { sparqlEndpoint: DIRECT_DATABASE_CONNECTION },
+  );
+  await querySudo(
+    `DELETE DATA {
+      GRAPH <http://mu.semte.ch/graphs/public> {
+        <${graph}> a <http://mu.semte.ch/vocabularies/ext/ValidationWorkingGraph> .
+      }
+    } `,
+    {},
+    { sparqlEndpoint: MU_SPARQL_ENDPOINT },
+  );
+}
+
+async function loadDatasetToTempGraph(dataset) {
+  const id = uuid();
+  const graph = `http://mu.semte.ch/graphs/temp/validation/${id}`;
+  const insertBatch = async (batch) => {
+    const ttl = await quadsToTtl(batch);
+    await querySudo(
+      `INSERT DATA {
+      GRAPH <${graph}> { ${ttl} }
+      GRAPH <http://mu.semte.ch/graphs/public> {
+        <${graph}> a <http://mu.semte.ch/vocabularies/ext/ValidationWorkingGraph> .
+      }
+    }`,
+      {},
+      { sparqlEndpoint: MU_SPARQL_ENDPOINT },
+    );
+  };
+  await handleQuadsInBatch(dataset, INSERT_BATCH_SIZE, insertBatch);
+
+  return graph;
+}
+
+/**
+ * Runs SPARQL Construct queries on a resource type to retrieve all triples in batches and adds them to the given store
+ *
+ * @async
+ * @function
+ * @param { N3.Store } store - N3.Store where the retrieved data will be added to
+ * @param { string[] } namedGraphs - Array of named graphs to run the SPARQL Construct queries on
+ * @param { string } resources - Array of URIs of the resources to retrieve data for
+ * @returns { void }
+ */
+export async function addResourcesOneLevelDeep(store, namedGraphs, resources) {
+  const safeNamedGraphs = namedGraphs
+    .map((uri) => sparqlEscapeUri(uri))
+    .join('\n');
+  const safeResources = resources.map((uri) => sparqlEscapeUri(uri)).join('\n');
+  const countFn = async () => {
+    const result = await querySudo(`
+      SELECT (COUNT(*) AS ?count)
+      WHERE {
+            VALUES ?graph {
+                ${safeNamedGraphs}
+            }
+
+            VALUES ?resource {
+                ${safeResources}
+            }
+
+            GRAPH ?graph {
+              ?resource ?pResource ?oResource .
+            }
+        }
+      `);
+    if (result.results.bindings.length) {
+      return result.results.bindings[0].count.value;
+    } else {
+      return 0;
+    }
+  };
+  const defaultLimitSize = 1000;
+
+  const queryFn = async (limitSize, offset) => {
+    const queryStringConstructOfGraph = `
+        CONSTRUCT {
+            ?resource ?pResource ?oResource .
+        }
+        WHERE {
+            VALUES ?graph {
+                ${safeNamedGraphs}
+            }
+
+            VALUES ?resource {
+                ${safeResources}
+            }
+
+            GRAPH ?graph {
+              ?resource ?pResource ?oResource .
+            }
+        }
+        LIMIT ${limitSize}
+        OFFSET ${offset}`;
+
+    const queryResponse = await querySudo(queryStringConstructOfGraph);
+    await addConstructQueryResponseToStore(store, queryResponse);
+  };
+
+  const count = await countFn(resources, namedGraphs);
+  const pagesCount =
+    count > defaultLimitSize ? Math.ceil(count / defaultLimitSize) : 1;
+
+  for (let page = 0; page <= pagesCount; page++) {
+    await queryFn(defaultLimitSize, page * defaultLimitSize);
+  }
+}
+
+/**
+ * Counts the number of resources in a set of named graphs
+ *
+ * @async
+ * @function
+ * @param { string } targetClass - Type of the resources
+ * @param { string[] } namedGraphs - Array of named graphs to run the SPARQL SELECT queries on
+ * @returns { integer }
+ */
+export async function countResources(targetClass, namedGraphs) {
+  const safeNamedGraphs = namedGraphs
+    .map((uri) => sparqlEscapeUri(uri))
+    .join('\n');
+
+  const countResult = await querySudo(`
+        SELECT (COUNT(*) AS ?count)
+        WHERE {
+                VALUES ?graph {
+                    ${safeNamedGraphs}
+                }
+
+                GRAPH ?graph {
+                    ?resource a ${sparqlEscapeUri(targetClass)} .
+                }
+            }
+        `);
+  const count = parseInt(countResult.results.bindings[0].count.value);
+  console.log(
+    `Found ${count} resources of targetClass ${targetClass} in graphs ${safeNamedGraphs}.`,
+  );
+  return count;
 }

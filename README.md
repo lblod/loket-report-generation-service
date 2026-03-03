@@ -135,6 +135,7 @@ Example of a SHACL report file that reads 100 triples of Mandatarissen and runs 
 
 ```js
 import { querySudo } from '@lblod/mu-auth-sudo';
+import { Store } from "n3";
 
 import { parseTurtleString, convertConstructQueryResponseToStore, validateDataset } from '../helpers.js';
 
@@ -158,15 +159,17 @@ export default {
       }
       LIMIT 100
       `;
+
+    const dataDataset = new Store();
     const queryResponse = await querySudo(queryString);
-    const dataset = convertConstructQueryResponseToStore(queryResponse);
+    addConstructQueryResponseToStore(dataDataset, queryResponse);
 
     const shape = `
       @prefix sh: <http://www.w3.org/ns/shacl#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
       <http://example.org/shape>
-      a sh:NodeShape ;
+      a sh:NodeShape, <http://mu.semte.ch/vocabularies/ext/SparqlShape> ;
       sh:targetClass <http://data.vlaanderen.be/ns/mandaat#Mandataris> ;
       sh:prefixes [ sh:declare [
         a sh:PrefixDeclaration ;
@@ -206,6 +209,24 @@ export default {
   },
 };
 ```
+
+The following helper functions are provided by the template:
+
+- `parseTurtleString(ttl) => Object (N3 store)`: Reads Turtle string and returns N3 Store.
+- `addConstructQueryResponseToStore(store, JsonResults) => void`: Adds the response from a SPARQL Construct query to a N3 Store. JsonResults is an object containing SPARQL JSON bindings.
+- `validateDataset(dataset, shapesDataset) => Promise (Report)`: Function for validating a RDF/JS dataset with an RDF/JS dataset containing SHACL shapes. A promise holding a Report object is returned.   
+- `mergeFilesContent(directory) => String`: Function for merging the content of files in a directory in a single string.
+- `enrichValidationReport(reportDataset, shapesDataset, dataDataset) => Object`: Function for enriching the report dataset (UUIDs, no blank nodes).
+- `saveDatasetToNamedGraphs(dataset, namedGraphs, mustBeOwnedBySomeone) => void`: Function for saving an N3 Store in named graphs.
+- `quadsToTtl(quads) => String`: Returns string in N-Triples format from N3 Quads.
+- `deletePreviousShaclValidationReports(namedGraphs)`: Deletes all SHACL validation reports in the specified named graphs except the most recent one.
+- `getSparqlValidationObjects(shapesDataset) => Object`: Function to retrieve SHACL shapes that contain SPARQL queries. Note: the shape is expected to have type `http://mu.semte.ch/vocabularies/ext/SparqlShape`.
+- `addSparqlValidationsToReport(dataDataset, reportDataset, sparqlValidationObjects)`: Runs the shapes with SPARQL queries on the dataset and adds the results to the report dataset.
+- `addResourcesOneLevelDeep(store, namedGraphs, resources) => void`: Fetches triples of the resources in the named graphs and adds to the store.
+
+The following enviroment variables can be configured:
+* `INSERT_BATCH_SIZE`: Number of triples that will be insert per batch. Defaults to `100`.
+* `DIRECT_DATABASE_CONNECTION`: SPARQL endpoint of triple store. Defaults to `http://virtuoso:8890/sparql`. This is used for dropping the temporary graph of SPARQL-based SHACL validations.
 
 ## Manually trigger reports
 
