@@ -1058,7 +1058,7 @@ export async function addResourcesOneLevelDeep(store, namedGraphs, resources) {
   const pagesCount =
     count > defaultLimitSize ? Math.ceil(count / defaultLimitSize) : 1;
 
-  for (let page = 0; page <= pagesCount; page++) {
+  for (let page = 0; page < pagesCount; page++) {
     await queryFn(defaultLimitSize, page * defaultLimitSize);
   }
 }
