@@ -463,16 +463,18 @@ export function enrichValidationReport(
       null,
     );
     for (const resultQuad of triplesOfValidationResult) {
-      if (resultQuad.object.termType != 'BlankNode') {
-        if (!isClassConstraintComponent)
-          reportDataset.add(
-            quad(
-              namedNode(validationResultURI),
-              resultQuad.predicate,
-              resultQuad.object,
-            ),
-          );
-      }
+      if (
+        resultQuad.predicate.value !=
+          'http://www.w3.org/ns/shacl#sourceShape' &&
+        !isClassConstraintComponent
+      )
+        reportDataset.add(
+          quad(
+            namedNode(validationResultURI),
+            resultQuad.predicate,
+            resultQuad.object,
+          ),
+        );
       // Remove blank node
       reportDataset.delete(
         quad(
@@ -559,7 +561,50 @@ export function enrichValidationReport(
       );
     }
   }
-  return { reportUri, reportDataset };
+
+  // There can still apear blank nodes, for example when using special forms of sh:path: sh:alternativePath, sh:inversePath etc
+  const reportDatasetWithoutBlankNodes = replaceBlankNodes(reportDataset);
+  return { reportUri, reportDataset: reportDatasetWithoutBlankNodes };
+}
+
+/**
+ * Replaces all blank nodes in an N3.Store with generated URIs.
+ * @param {Store} store - N3.Store instance
+ * @param {string} baseUri - Base URI for generated resources
+ * @returns {Store} New store with blank nodes replaced
+ */
+export function replaceBlankNodes(
+  store,
+  baseUri = 'http://data.lblod.info/id/.well-known/',
+) {
+  const newStore = new Store();
+  const blankNodeMap = new Map();
+
+  function getOrCreateUri(blankNodeId) {
+    if (!blankNodeMap.has(blankNodeId)) {
+      const blankNodeUUID = uuid();
+      const blankNodeURI = `${baseUri}${blankNodeUUID}`;
+      blankNodeMap.set(blankNodeId, namedNode(blankNodeURI));
+    }
+    return blankNodeMap.get(blankNodeId);
+  }
+
+  for (const q of store.match(null, null, null, null)) {
+    let subject = q.subject;
+    let object = q.object;
+
+    if (subject.termType === 'BlankNode') {
+      subject = getOrCreateUri(subject.value);
+    }
+
+    if (object.termType === 'BlankNode') {
+      object = getOrCreateUri(object.value);
+    }
+
+    newStore.addQuad(quad(subject, q.predicate, object, q.graph));
+  }
+
+  return newStore;
 }
 
 /**
