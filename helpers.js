@@ -1140,3 +1140,141 @@ export async function countResources(targetClass, namedGraphs) {
   );
   return count;
 }
+
+export async function getIssuesFromReportId(
+  reportId,
+  pageSize = 100,
+  offset = 0,
+) {
+  if (!reportId) return [];
+
+  const countFn = async () => {
+    const result = await querySudo(`
+      PREFIX sh: <http://www.w3.org/ns/shacl#>
+      PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+      PREFIX besluit: <http://data.vlaanderen.be/ns/besluit#>
+      PREFIX mandaat: <http://data.vlaanderen.be/ns/mandaat#>
+      PREFIX lmb: <http://lblod.data.gift/vocabularies/lmb/>
+      
+      SELECT (COUNT(DISTINCT ?result) as ?count)
+      WHERE {
+        ?report a sh:ValidationReport ;
+                mu:uuid ${sparqlEscapeString(reportId)} ;
+                sh:result ?result .
+
+        ?result a sh:ValidationResult ;
+                sh:focusNode ?focusNode .
+      }
+      `);
+    if (result.results.bindings.length) {
+      return result.results.bindings[0].count.value;
+    } else {
+      return 0;
+    }
+  };
+
+  const issues = await querySudo(`
+    PREFIX sh: <http://www.w3.org/ns/shacl#>
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    PREFIX besluit: <http://data.vlaanderen.be/ns/besluit#>
+    PREFIX mandaat: <http://data.vlaanderen.be/ns/mandaat#>
+    PREFIX lmb: <http://lblod.data.gift/vocabularies/lmb/>
+    
+    SELECT ?result ?resultId ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value ?targetClassOfFocusNode
+    WHERE {
+      ?report a sh:ValidationReport ;
+              mu:uuid ${sparqlEscapeString(reportId)} ;
+              sh:result ?result .
+
+      ?result a sh:ValidationResult ;
+              mu:uuid ?resultId ;
+              sh:focusNode ?focusNode .
+      OPTIONAL {
+        ?focusNode mu:uuid ?focusNodeId .
+      }
+      OPTIONAL {
+        ?focusNode a ?targetClassOfFocusNode .
+      }
+      OPTIONAL {
+        ?result sh:resultMessage ?resultMessage .
+      }
+      OPTIONAL {
+        ?result sh:resultSeverity ?resultSeverity .
+      }
+      OPTIONAL {
+        ?result sh:sourceShape ?sourceShape .
+      }
+      OPTIONAL {
+        ?result sh:sourceConstraintComponent ?sourceConstraintComponent .
+      }
+      OPTIONAL {
+        ?result sh:value ?value .
+      }
+      OPTIONAL {
+        ?result sh:resultPath ?resultPath .
+      }
+    }
+    LIMIT ${pageSize}
+    OFFSET ${offset}
+  `);
+
+  if (!issues.results.bindings) {
+    throw Error(
+      'Er ging iets fout bij het opghalen van de validatie resultaten.',
+    );
+  }
+
+  const total = await countFn();
+  const transformedIssues = issues.results.bindings.map((issue) => {
+    return {
+      result: issue.result.value,
+      resultId: issue.resultId.value,
+      focusNode: issue.focusNode.value,
+      focusNodeId: issue.focusNodeId?.value,
+      resultSeverity: issue.resultSeverity?.value,
+      sourceConstraintComponent: issue.sourceConstraintComponent?.value,
+      sourceShape: issue.sourceShape?.value,
+      resultMessage: issue.resultMessage?.value,
+      resultPath: issue.resultPath?.value,
+      value: issue.value?.value,
+      targetClassOfFocusNode: issue.targetClassOfFocusNode.value,
+    };
+  });
+  return {
+    issues: transformedIssues,
+    total: total,
+  };
+}
+
+export async function getLatestShaclReportId(namedGraphs = []) {
+  const graphValues = namedGraphs.length
+    ? `VALUES ?g {
+          ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
+        }`
+    : '';
+  const queryString = `
+    PREFIX dct: <http://purl.org/dc/terms/>
+    PREFIX sh: <http://www.w3.org/ns/shacl#>
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+
+    SELECT DISTINCT ?reportUuid
+    WHERE {
+        ${graphValues}
+        GRAPH ?g {
+            ?reportUri a sh:ValidationReport ;
+                mu:uuid ?reportUuid ;
+                dct:created ?created .
+        }
+    }
+    ORDER BY DESC(?created)
+    LIMIT 1
+  `;
+
+  const response = await querySudo(queryString);
+
+  if (response.results.bindings.length) {
+    return response.results.bindings[0].reportUuid.value;
+  } else {
+    return undefined;
+  }
+}

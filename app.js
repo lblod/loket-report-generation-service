@@ -2,7 +2,7 @@ import { app, errorHandler } from 'mu';
 import scheduleReportTask from './util/schedule-report-task';
 import bodyParser from 'body-parser';
 import reports from './config/index';
-import { sparqlEscapeString, query } from 'mu';
+import { getIssuesFromReportId, getLatestShaclReportId } from './helpers';
 
 // parse application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -71,70 +71,94 @@ app.get('/', async (req, res) => {
 
 app.use(errorHandler);
 
+function parsePagination(req) {
+  const pageSize = parseInt(req.query.page?.size ?? 100, 10);
+  const pageNumber = parseInt(req.query.page?.number ?? 1, 10);
+
+  if (pageSize <= 0 || pageNumber <= 0) {
+    return { error: true };
+  }
+
+  const offset = (pageNumber - 1) * pageSize;
+
+  return { pageSize, pageNumber, offset };
+}
+
+function buildIssuesResponse(req, issues, total, pageNumber, pageSize) {
+  const totalPages = Math.ceil(total / pageSize);
+  const last = totalPages > 0 ? totalPages : 1;
+  return {
+    data: issues.map((issue) => ({
+      type: 'validationresult',
+      id: String(issue.resultId),
+      attributes: { ...issue },
+    })),
+    meta: {
+      total,
+      page: pageNumber,
+      pageSize,
+      totalPages,
+    },
+    links: {
+      self: `${req.baseUrl}${req.path}?page[number]=${pageNumber}&page[size]=${pageSize}`,
+      first: `${req.baseUrl}${req.path}?page[number]=1&page[size]=${pageSize}`,
+      last: `${req.baseUrl}${req.path}?page[number]=${last}&page[size]=${pageSize}`,
+      prev:
+        pageNumber > 1
+          ? `${req.baseUrl}${req.path}?page[number]=${pageNumber - 1}&page[size]=${pageSize}`
+          : null,
+      next:
+        pageNumber < totalPages
+          ? `${req.baseUrl}${req.path}?page[number]=${pageNumber + 1}&page[size]=${pageSize}`
+          : null,
+    },
+  };
+}
+
 app.get('/shacl-reports/:id/issues', async (req, res) => {
-  const reportId = req.params.id;
+  try {
+    const pagination = parsePagination(req);
 
-  const issues = await query(`
-    PREFIX sh: <http://www.w3.org/ns/shacl#>
-    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
-    PREFIX besluit: <http://data.vlaanderen.be/ns/besluit#>
-    PREFIX mandaat: <http://data.vlaanderen.be/ns/mandaat#>
-    PREFIX lmb: <http://lblod.data.gift/vocabularies/lmb/>
-    
-    SELECT DISTINCT ?result ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value ?targetClassOfFocusNode
-    WHERE {
-      ?report a sh:ValidationReport ;
-              mu:uuid ${sparqlEscapeString(reportId)} ;
-              sh:result ?result .
-
-      ?result a sh:ValidationResult ;
-              sh:focusNode ?focusNode .
-      OPTIONAL {
-        ?focusNode mu:uuid ?focusNodeId .
-      }
-      OPTIONAL {
-        ?focusNode a ?targetClassOfFocusNode .
-      }
-      OPTIONAL {
-        ?result sh:resultMessage ?resultMessage .
-      }
-      OPTIONAL {
-        ?result sh:resultSeverity ?resultSeverity .
-      }
-      OPTIONAL {
-        ?result sh:sourceShape ?sourceShape .
-      }
-      OPTIONAL {
-        ?result sh:sourceConstraintComponent ?sourceConstraintComponent .
-      }
-      OPTIONAL {
-        ?result sh:value ?value .
-      }
-      OPTIONAL {
-        ?result sh:resultPath ?resultPath .
-      }
+    if (pagination.error) {
+      return res.status(400).json({
+        errors: [
+          {
+            status: '400',
+            title: 'Invalid pagination parameters',
+            detail: 'page[size] and page[number] must be positive integers.',
+          },
+        ],
+      });
     }
-  `);
 
-  if (!issues.results.bindings) {
+    const { pageSize, pageNumber, offset } = pagination;
+
+    const reportId =
+      req.params.id === 'latest'
+        ? await getLatestShaclReportId()
+        : req.params.id;
+
+    const { issues, total } = await getIssuesFromReportId(
+      reportId,
+      pageSize,
+      offset,
+    );
+
+    res.setHeader('Content-Type', 'application/vnd.api+json');
+    res.json(buildIssuesResponse(req, issues, total, pageNumber, pageSize));
+  } catch (e) {
     res
       .status(500)
-      .send('Er ging iets fout bij het opghalen van de validatie resultaten.');
-    return;
+      .setHeader('Content-Type', 'application/vnd.api+json')
+      .json({
+        errors: [
+          {
+            status: '500',
+            title: 'Internal Server Error',
+            detail:
+              'Er ging iets fout bij het ophalen van de validatie resultaten.',
+          },
+        ],
+      });
   }
-  const transformedIssues = issues.results.bindings.map((issue) => {
-    return {
-      result: issue.result.value,
-      focusNode: issue.focusNode.value,
-      focusNodeId: issue.focusNodeId?.value,
-      resultSeverity: issue.resultSeverity?.value,
-      sourceConstraintComponent: issue.sourceConstraintComponent?.value,
-      sourceShape: issue.sourceShape?.value,
-      resultMessage: issue.resultMessage?.value,
-      resultPath: issue.resultPath?.value,
-      value: issue.value?.value,
-      targetClassOfFocusNode: issue.targetClassOfFocusNode.value,
-    };
-  });
-  res.json(transformedIssues);
 });
