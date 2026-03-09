@@ -1163,7 +1163,10 @@ export async function getIssuesFromReportId(
                 sh:result ?result .
 
         ?result a sh:ValidationResult ;
-                sh:focusNode ?focusNode .
+              mu:uuid ?resultId ;
+              sh:focusNode ?focusNode ;
+              sh:resultMessage ?resultMessage ;
+              sh:value ?value .
       }
       `);
     if (result.results.bindings.length) {
@@ -1180,24 +1183,28 @@ export async function getIssuesFromReportId(
     PREFIX mandaat: <http://data.vlaanderen.be/ns/mandaat#>
     PREFIX lmb: <http://lblod.data.gift/vocabularies/lmb/>
     
-    SELECT ?result ?resultId ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value ?targetClassOfFocusNode
+    SELECT DISTINCT ?result ?resultId ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value ?targetClassOfFocusNode
     WHERE {
-      ?report a sh:ValidationReport ;
-              mu:uuid ${sparqlEscapeString(reportId)} ;
-              sh:result ?result .
+      {
+        select distinct ?result 
+        where {
+          ?report a sh:ValidationReport ;
+                  mu:uuid ${sparqlEscapeString(reportId)} ;
+                  sh:result ?result .
+        }
+        LIMIT ${pageSize}
+        OFFSET ${offset}
+      }
 
       ?result a sh:ValidationResult ;
               mu:uuid ?resultId ;
-              sh:focusNode ?focusNode .
-      OPTIONAL {
-        ?focusNode mu:uuid ?focusNodeId .
-      }
-      OPTIONAL {
-        ?focusNode a ?targetClassOfFocusNode .
-      }
-      OPTIONAL {
-        ?result sh:resultMessage ?resultMessage .
-      }
+              sh:focusNode ?focusNode ;
+              sh:resultMessage ?resultMessage ;
+              sh:value ?value .
+
+      ?focusNode a ?targetClassOfFocusNode ;
+                mu:uuid ?focusNodeId .
+
       OPTIONAL {
         ?result sh:resultSeverity ?resultSeverity .
       }
@@ -1208,14 +1215,9 @@ export async function getIssuesFromReportId(
         ?result sh:sourceConstraintComponent ?sourceConstraintComponent .
       }
       OPTIONAL {
-        ?result sh:value ?value .
-      }
-      OPTIONAL {
         ?result sh:resultPath ?resultPath .
       }
     }
-    LIMIT ${pageSize}
-    OFFSET ${offset}
   `);
 
   if (!issues.results.bindings) {

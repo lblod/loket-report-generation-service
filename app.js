@@ -72,7 +72,7 @@ app.get('/', async (req, res) => {
 app.use(errorHandler);
 
 function parsePagination(req) {
-  const pageSize = parseInt(req.query.page?.size ?? 100, 10);
+  const pageSize = parseInt(req.query.page?.size ?? 10, 10);
   const pageNumber = parseInt(req.query.page?.number ?? 1, 10);
 
   if (pageSize <= 0 || pageNumber <= 0) {
