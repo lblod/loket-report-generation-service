@@ -1056,14 +1056,14 @@ async function addShaclResultsToReport(
 
 async function dropTempGraph(graph) {
   await querySudo(
-    `DROP SILENT GRAPH <${graph}>`,
+    `DROP SILENT GRAPH ${sparqlEscapeUri(graph)}`,
     {},
     { sparqlEndpoint: DIRECT_DATABASE_CONNECTION },
   );
   await querySudo(
     `DELETE DATA {
       GRAPH <http://mu.semte.ch/graphs/public> {
-        <${graph}> a <http://mu.semte.ch/vocabularies/ext/ValidationWorkingGraph> .
+        ${sparqlEscapeUri(graph)} a <http://mu.semte.ch/vocabularies/ext/ValidationWorkingGraph> .
       }
     } `,
     {},
@@ -1078,9 +1078,9 @@ async function loadDatasetToTempGraph(dataset) {
     const ttl = await quadsToTtl(batch);
     await querySudo(
       `INSERT DATA {
-      GRAPH <${graph}> { ${ttl} }
+      GRAPH ${sparqlEscapeUri(graph)} { ${ttl} }
       GRAPH <http://mu.semte.ch/graphs/public> {
-        <${graph}> a <http://mu.semte.ch/vocabularies/ext/ValidationWorkingGraph> .
+        ${sparqlEscapeUri(graph)} a <http://mu.semte.ch/vocabularies/ext/ValidationWorkingGraph> .
       }
     }`,
       {},
