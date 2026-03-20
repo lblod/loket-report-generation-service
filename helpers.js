@@ -346,63 +346,50 @@ export async function mergeFilesContent(directory) {
  * @param { N3.Store } reportDataset - Store containing the SHACL Report to enrich
  * @param { N3.Store } shapesDataset - Store containing the SHACL shapes
  * @param { N3.Store } dataDataset - Store containing the data that is validated
- * @returns { object } An object which include the `reportUri` and `reportDataset` keys
+ * @returns { object } An object which include the `reportDataset` key
  */
 export function enrichValidationReport(
   reportDataset,
   shapesDataset,
   dataDataset,
 ) {
+  enrichValidationResults(reportDataset, shapesDataset, dataDataset);
+
+  enrichValidationReports(reportDataset);
+
+  // There can still apear blank nodes, for example when using special forms of sh:path: sh:alternativePath, sh:inversePath etc
+  const reportDatasetWithoutBlankNodes = replaceBlankNodes(reportDataset);
+  return { reportDataset: reportDatasetWithoutBlankNodes };
+}
+
+function enrichValidationResults(reportDataset, shapesDataset, dataDataset) {
   const validationResults = reportDataset.match(
     null,
     namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
     namedNode('http://www.w3.org/ns/shacl#ValidationResult'),
   );
   for (const validationResultQuad of validationResults) {
-    // Retrieve targetClass of ValidationResult using the targetClass of the shape or type of instance
-    const sourceShapeQuads = reportDataset.match(
-      validationResultQuad.subject,
-      namedNode('http://www.w3.org/ns/shacl#sourceShape'),
-      null,
-    );
-    if (!sourceShapeQuads.size)
-      throw new Error('No source shape found on validation result');
-    const [sourceShapeQuad] = sourceShapeQuads;
-    const targetClassInShapeQuads = shapesDataset.match(
-      sourceShapeQuad.object,
-      namedNode('http://www.w3.org/ns/shacl#targetClass'),
-      null,
-    );
-    let targetClassQuad;
-    let targetIdQuad;
-    const focusNodeQuads = reportDataset.match(
-      validationResultQuad.subject,
-      namedNode('http://www.w3.org/ns/shacl#focusNode'),
-      null,
-    );
-    if (!targetClassInShapeQuads.size) {
-      // Fallback by searching the class of the focus node in the dataset
-      if (!focusNodeQuads.size) {
-        throw new Error(
-          'No focus node found in validation result as fallback to retrieve targetClass',
-        );
-      }
-      const [focusNodeQuad] = focusNodeQuads;
+    // Replace blank node of ValidationResult with UUID-based URI
+    const validationResultUUID = uuid();
+    const validationResultURI = `http://data.lblod.info/id/validationresults/${validationResultUUID}`;
 
-      const focusNodeTypeInDatasetQuads = dataDataset.match(
-        focusNodeQuad.object,
-        namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
-        null,
-      );
-      if (!focusNodeTypeInDatasetQuads.size) {
-        throw new Error(
-          'No type of focus node found in validation result as fallback to retrieve targetClass',
-        );
-      }
-      [targetClassQuad] = focusNodeTypeInDatasetQuads;
-    } else {
-      [targetClassQuad] = targetClassInShapeQuads;
-    }
+    const targetClass = getTargetClass(
+      validationResultQuad.subject,
+      reportDataset,
+      shapesDataset,
+      dataDataset,
+    );
+
+    const targetId = getTargetId(
+      validationResultQuad.subject,
+      reportDataset,
+      dataDataset,
+    );
+    addTargetIdToValidationResult(
+      validationResultQuad.subject,
+      reportDataset,
+      targetId,
+    );
 
     // Do not include triples of validation result when ClassConstraintComponent
     const isClassConstraintComponent =
@@ -412,43 +399,19 @@ export function enrichValidationReport(
         namedNode('http://www.w3.org/ns/shacl#ClassConstraintComponent'),
       ).size > 0;
 
-    // Replace blank node of ValidationResult with UUID-based URI
-    const validationResultUUID = uuid();
-    const validationResultURI = `http://data.lblod.info/id/validationresults/${validationResultUUID}`;
-
-    if (focusNodeQuads.size) {
-      const [focusNodeQuad] = focusNodeQuads;
-      [targetIdQuad] = dataDataset.match(
-        focusNodeQuad.object,
-        namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
-        null,
-      );
-      if (targetIdQuad) {
+    if (!isClassConstraintComponent) {
+      // Add targetClass to validation result
+      if (targetClass)
         reportDataset.add(
           quad(
             validationResultQuad.subject,
             namedNode(
-              'http://lblod.data.gift/vocabularies/lmb/targetIdOfFocusNode',
+              'http://lblod.data.gift/vocabularies/lmb/targetClassOfFocusNode',
             ),
-            targetIdQuad.object,
+            namedNode(targetClass),
           ),
         );
-      }
-    }
-
-    // Add targetClass to validation result
-    if (!isClassConstraintComponent)
-      reportDataset.add(
-        quad(
-          validationResultQuad.subject,
-          namedNode(
-            'http://lblod.data.gift/vocabularies/lmb/targetClassOfFocusNode',
-          ),
-          namedNode(targetClassQuad.object.value),
-        ),
-      );
-    // Add UUID
-    if (!isClassConstraintComponent)
+      // Add UUID
       reportDataset.add(
         quad(
           validationResultQuad.subject,
@@ -456,71 +419,32 @@ export function enrichValidationReport(
           literal(validationResultUUID),
         ),
       );
-
-    const triplesOfValidationResult = reportDataset.match(
-      validationResultQuad.subject,
-      null,
-      null,
-    );
-    for (const resultQuad of triplesOfValidationResult) {
-      if (
-        resultQuad.predicate.value !=
-          'http://www.w3.org/ns/shacl#sourceShape' &&
-        !isClassConstraintComponent
-      )
-        reportDataset.add(
-          quad(
-            namedNode(validationResultURI),
-            resultQuad.predicate,
-            resultQuad.object,
-          ),
-        );
-      // Remove blank node
-      reportDataset.delete(
-        quad(
-          validationResultQuad.subject,
-          resultQuad.predicate,
-          resultQuad.object,
-        ),
+      // Add validation result triples with validationResultURI
+      replaceBlankNodesOfValidationResult(
+        validationResultQuad.subject,
+        reportDataset,
+        validationResultURI,
       );
-    }
-
-    const triplesPointingToValidationResult = reportDataset.match(
-      null,
-      null,
-      validationResultQuad.subject,
-    );
-    for (const resultQuad of triplesPointingToValidationResult) {
-      if (!isClassConstraintComponent)
-        reportDataset.add(
-          quad(
-            resultQuad.subject,
-            resultQuad.predicate,
-            namedNode(validationResultURI),
-          ),
-        );
-      // Remove blank node
-      reportDataset.delete(
-        quad(
-          resultQuad.subject,
-          resultQuad.predicate,
-          validationResultQuad.subject,
-        ),
+    } else {
+      // Remove original validation result triples that use blank node for validation result
+      removeBlankNodesOfValidationResult(
+        validationResultQuad.subject,
+        reportDataset,
       );
     }
   }
+}
 
+function enrichValidationReports(reportDataset) {
   // Replace blank node of ValidationReport with UUID-based URI
   const validationReports = reportDataset.match(
     null,
     namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
     namedNode('http://www.w3.org/ns/shacl#ValidationReport'),
   );
-  let reportUri = null;
   for (const validationReportQuad of validationReports) {
     const reportUUID = uuid();
     const reportURI = `http://data.lblod.info/id/reports/${reportUUID}`;
-    reportUri = reportURI;
     const reportCreatedAt = new Date().toISOString();
     const triplesOfValidationReport = reportDataset.match(
       validationReportQuad.subject,
@@ -561,10 +485,154 @@ export function enrichValidationReport(
       );
     }
   }
+}
 
-  // There can still apear blank nodes, for example when using special forms of sh:path: sh:alternativePath, sh:inversePath etc
-  const reportDatasetWithoutBlankNodes = replaceBlankNodes(reportDataset);
-  return { reportUri, reportDataset: reportDatasetWithoutBlankNodes };
+function removeBlankNodesOfValidationResult(
+  validationResultNode,
+  reportDataset,
+) {
+  const triplesOfValidationResult = reportDataset.match(
+    validationResultNode,
+    null,
+    null,
+  );
+  for (const resultQuad of triplesOfValidationResult)
+    reportDataset.delete(resultQuad);
+  const triplesPointingToValidationResult = reportDataset.match(
+    null,
+    null,
+    validationResultNode,
+  );
+  for (const resultQuad of triplesPointingToValidationResult)
+    reportDataset.delete(resultQuad);
+}
+
+function replaceBlankNodesOfValidationResult(
+  validationResultNode,
+  reportDataset,
+  validationResultURI,
+) {
+  const triplesOfValidationResult = reportDataset.match(
+    validationResultNode,
+    null,
+    null,
+  );
+  for (const resultQuad of triplesOfValidationResult) {
+    if (resultQuad.predicate.value != 'http://www.w3.org/ns/shacl#sourceShape')
+      reportDataset.add(
+        quad(
+          namedNode(validationResultURI),
+          resultQuad.predicate,
+          resultQuad.object,
+        ),
+      );
+  }
+
+  const triplesPointingToValidationResult = reportDataset.match(
+    null,
+    null,
+    validationResultNode,
+  );
+  for (const resultQuad of triplesPointingToValidationResult) {
+    reportDataset.add(
+      quad(
+        resultQuad.subject,
+        resultQuad.predicate,
+        namedNode(validationResultURI),
+      ),
+    );
+  }
+  // Remove original validation result triples that use blank node for validation result
+  removeBlankNodesOfValidationResult(validationResultNode, reportDataset);
+}
+
+function addTargetIdToValidationResult(
+  validationResultNode,
+  reportDataset,
+  targetId,
+) {
+  if (targetId) {
+    reportDataset.add(
+      quad(
+        validationResultNode,
+        namedNode(
+          'http://lblod.data.gift/vocabularies/lmb/targetIdOfFocusNode',
+        ),
+        literal(targetId),
+      ),
+    );
+  }
+}
+
+function getTargetClass(
+  validationResultNode,
+  reportDataset,
+  shapesDataset,
+  dataDataset,
+) {
+  // Retrieve targetClass of ValidationResult using the targetClass of the shape or type of instance
+  const sourceShapeQuads = reportDataset.match(
+    validationResultNode,
+    namedNode('http://www.w3.org/ns/shacl#sourceShape'),
+    null,
+  );
+  if (sourceShapeQuads.size) {
+    const [sourceShapeQuad] = sourceShapeQuads;
+    const targetClassInShapeQuads = shapesDataset.match(
+      sourceShapeQuad.object,
+      namedNode('http://www.w3.org/ns/shacl#targetClass'),
+      null,
+    );
+    if (targetClassInShapeQuads.size) {
+      const [targetClassInShapeQuad] = targetClassInShapeQuads;
+      return targetClassInShapeQuad.object.value;
+    }
+  }
+  // Searching the class of the focus node in the dataset
+  const focusNodeQuads = reportDataset.match(
+    validationResultNode,
+    namedNode('http://www.w3.org/ns/shacl#focusNode'),
+    null,
+  );
+  if (focusNodeQuads.size) {
+    const [focusNodeQuad] = focusNodeQuads;
+    const focusNodeTypeInDatasetQuads = dataDataset.match(
+      focusNodeQuad.object,
+      namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+      null,
+    );
+    // No type of focus node found in validation result as fallback to retrieve targetClass
+    if (!focusNodeTypeInDatasetQuads.size) return undefined;
+    else {
+      const [focusNodeTypeInDatasetQuad] = focusNodeTypeInDatasetQuads;
+      return focusNodeTypeInDatasetQuad.object.value;
+    }
+  } else {
+    // No focus node found in validation result as fallback to retrieve targetClass
+    return undefined;
+  }
+}
+
+function getTargetId(validationResultNode, reportDataset, dataDataset) {
+  const focusNodeQuads = reportDataset.match(
+    validationResultNode,
+    namedNode('http://www.w3.org/ns/shacl#focusNode'),
+    null,
+  );
+  // No focus node found
+  if (!focusNodeQuads.size) return undefined;
+  const [focusNodeQuad] = focusNodeQuads;
+  const uuidQuads = dataDataset.match(
+    focusNodeQuad.object,
+    namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+    null,
+  );
+  if (uuidQuads.size) {
+    const [uuidQuad] = uuidQuads;
+    return uuidQuad.object.value;
+  } else {
+    return undefined;
+  }
 }
 
 /**
@@ -1165,8 +1233,7 @@ export async function getIssuesFromReportId(
         ?result a sh:ValidationResult ;
               mu:uuid ?resultId ;
               sh:focusNode ?focusNode ;
-              sh:resultMessage ?resultMessage ;
-              sh:value ?value .
+              sh:resultMessage ?resultMessage .
       }
       `);
     if (result.results.bindings.length) {
@@ -1199,12 +1266,14 @@ export async function getIssuesFromReportId(
       ?result a sh:ValidationResult ;
               mu:uuid ?resultId ;
               sh:focusNode ?focusNode ;
-              sh:resultMessage ?resultMessage ;
-              sh:value ?value .
+              sh:resultMessage ?resultMessage .
 
       ?focusNode a ?targetClassOfFocusNode ;
                 mu:uuid ?focusNodeId .
 
+      OPTIONAL {
+        ?result sh:value ?value .
+      }
       OPTIONAL {
         ?result sh:resultSeverity ?resultSeverity .
       }
