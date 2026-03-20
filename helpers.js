@@ -682,19 +682,10 @@ export function replaceBlankNodes(
  * @function
  * @param { N3.Store } dataset - Store containing the SHACL Report to enrich
  * @param { string[] } namedGraphs - Array of named graphs to save the dataset to
- * @param { boolean } mustBeOwnedBySomeone - Whether the named graphs should be filtered to only include graphs that are ext:ownedBy someone
  * @returns { void }
  */
-export async function saveDatasetToNamedGraphs(
-  dataset,
-  namedGraphs,
-  mustBeOwnedBySomeone = false,
-) {
+export async function saveDatasetToNamedGraphs(dataset, namedGraphs) {
   const insertBatch = async (batch) => {
-    let mustBeOwnedBySomeoneSparqlString = '';
-    if (mustBeOwnedBySomeone) {
-      mustBeOwnedBySomeoneSparqlString = '?g ext:ownedBy ?someone .';
-    }
     const ttl = await quadsToTtl(batch);
     await updateSudo(`
         PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
@@ -707,7 +698,6 @@ export async function saveDatasetToNamedGraphs(
           VALUES ?g {
             ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
           }
-          ${mustBeOwnedBySomeoneSparqlString}
         }`);
   };
   await handleQuadsInBatch(dataset, INSERT_BATCH_SIZE, insertBatch);
