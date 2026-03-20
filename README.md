@@ -210,14 +210,14 @@ export default {
 };
 ```
 
-The following helper functions are provided by the template:
+The following helper functions are provided by the service:
 
 - `parseTurtleString(ttl) => Object (N3 store)`: Reads Turtle string and returns N3 Store.
 - `addConstructQueryResponseToStore(store, JsonResults) => void`: Adds the response from a SPARQL Construct query to a N3 Store. JsonResults is an object containing SPARQL JSON bindings.
 - `validateDataset(dataset, shapesDataset) => Promise (Report)`: Function for validating a RDF/JS dataset with an RDF/JS dataset containing SHACL shapes. A promise holding a Report object is returned.   
 - `mergeFilesContent(directory) => String`: Function for merging the content of files in a directory in a single string.
 - `enrichValidationReport(reportDataset, shapesDataset, dataDataset) => Object`: Function for enriching the report dataset (UUIDs, no blank nodes).
-- `saveDatasetToNamedGraphs(dataset, namedGraphs, mustBeOwnedBySomeone) => void`: Function for saving an N3 Store in named graphs.
+- `saveDatasetToNamedGraphs(dataset, namedGraphs) => void`: Function for saving an N3 Store in named graphs.
 - `quadsToTtl(quads) => String`: Returns string in N-Triples format from N3 Quads.
 - `deletePreviousShaclValidationReports(namedGraphs)`: Deletes all SHACL validation reports in the specified named graphs except the most recent one.
 - `getSparqlValidationObjects(shapesDataset) => Object`: Function to retrieve SHACL shapes that contain SPARQL queries. Note: the shape is expected to have type `http://mu.semte.ch/vocabularies/ext/SparqlShape`.
