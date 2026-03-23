@@ -354,11 +354,7 @@ export async function mergeFilesContent(directory) {
  * @param { N3.Store } dataDataset - Store containing the data that is validated
  * @returns { object } An object which include the `reportDataset` key
  */
-export function enrichValidationReport(
-  reportDataset,
-  shapesDataset,
-  dataDataset,
-) {
+function enrichValidationReport(reportDataset, shapesDataset, dataDataset) {
   enrichValidationResults(reportDataset, shapesDataset, dataDataset);
 
   enrichValidationReports(reportDataset);
