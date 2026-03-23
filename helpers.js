@@ -931,6 +931,16 @@ async function runSparqlValidations(graph, sparqlValidationObjects) {
   return validationResults;
 }
 
+/**
+ * Adds validation result objects as SHACL validation results to a SHACL Report.
+ *
+ * @async
+ * @function
+ * @param { Object[] } validationResults - Array of objects containing the validation result URI as key, and as value an object with keys target, value, and message
+ * @param { N3.Store } reportDataset - N3.Store containing the SHACL validation report to be extended with validation results
+ * @param { N3.Store } dataDataset - Store containing the data that is validated
+ * @returns { void }
+ */
 async function addShaclResultsToReport(
   validationResults,
   reportDataset,
@@ -943,117 +953,144 @@ async function addShaclResultsToReport(
     null,
   );
 
-  Object.keys(validationResults).forEach((validationUri) => {
-    const errors = validationResults[validationUri];
-    errors.forEach((error) => {
-      const id = uuid();
-      const errorUri = `http://data.lblod.info/id/validationresults/${id}`;
-      const targetClass = dataDataset.match(
-        namedNode(error.target),
-        namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
-        null,
-        null,
-      );
-      if (targetClass.size) {
-        const [targetClassQuad] = targetClass;
-        reportDataset.add(
-          quad(
-            namedNode(errorUri),
-            namedNode(
-              'http://lblod.data.gift/vocabularies/lmb/targetClassOfFocusNode',
-            ),
-            namedNode(targetClassQuad.object.value),
-          ),
-        );
-      }
-      const targetId = dataDataset.match(
-        namedNode(error.target),
-        namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
-        null,
-        null,
-      );
-      if (targetId.size) {
-        const [targetIdQuad] = targetId;
-        reportDataset.add(
-          quad(
-            namedNode(errorUri),
-            namedNode(
-              'http://lblod.data.gift/vocabularies/lmb/targetIdOfFocusNode',
-            ),
-            literal(targetIdQuad.object.value),
-          ),
-        );
-      }
-      reportDataset.add(
-        quad(
-          reportUri.subject,
-          namedNode('http://www.w3.org/ns/shacl#result'),
-          namedNode(errorUri),
-        ),
-      );
-      reportDataset.add(
-        quad(
-          namedNode(errorUri),
-          namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
-          namedNode('http://www.w3.org/ns/shacl#ValidationResult'),
-        ),
-      );
-      reportDataset.add(
-        quad(
-          namedNode(errorUri),
-          namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
-          literal(id),
-        ),
-      );
-
-      if (error.message) {
-        reportDataset.add(
-          quad(
-            namedNode(errorUri),
-            namedNode('http://www.w3.org/ns/shacl#resultMessage'),
-            literal(error.message),
-          ),
-        );
-      }
-      reportDataset.add(
-        quad(
-          namedNode(errorUri),
-          namedNode('http://www.w3.org/ns/shacl#focusNode'),
-          namedNode(error.target),
-        ),
-      );
-      reportDataset.add(
-        quad(
-          namedNode(errorUri),
-          namedNode('http://www.w3.org/ns/shacl#sourceShape'),
-          namedNode(validationUri),
-        ),
-      );
-      reportDataset.add(
-        quad(
-          namedNode(errorUri),
-          namedNode('http://www.w3.org/ns/shacl#sourceConstraintComponent'),
-          namedNode(validationUri),
-        ),
-      );
-      if (error.value) {
-        reportDataset.add(
-          quad(
-            namedNode(errorUri),
-            namedNode('http://www.w3.org/ns/shacl#value'),
-            literal(error.value),
-          ),
-        );
-      }
-      reportDataset.add(
-        quad(
-          namedNode(errorUri),
-          namedNode('http://www.w3.org/ns/shacl#resultSeverity'),
-          namedNode('http://www.w3.org/ns/shacl#Error'),
-        ),
-      );
-    });
+  Object.keys(validationResults).forEach((validationShapeUri) => {
+    const results = validationResults[validationShapeUri];
+    results.forEach((result) =>
+      addResultToReport(
+        reportDataset,
+        dataDataset,
+        reportUri,
+        validationShapeUri,
+        result,
+      ),
+    );
   });
+}
+
+/**
+ * Adds one validation result object as SHACL validation result to a SHACL Report.
+ *
+ * @function
+ * @param { N3.Store } reportDataset - N3.Store containing the SHACL validation report to be extended with validation results
+ * @param { N3.Store } dataDataset - Store containing the data that is validated
+ * @param { string } reportUri - URI of the SHACL report
+ * @param { string } validationUri - URI of the SHACL Property shape
+ * @param { Object } result - Object with keys: target, value, and message
+ * @returns { void }
+ */
+function addResultToReport(
+  reportDataset,
+  dataDataset,
+  reportUri,
+  validationUri,
+  result,
+) {
+  const id = uuid();
+  const resultUri = `http://data.lblod.info/id/validationresults/${id}`;
+  const targetClass = dataDataset.match(
+    namedNode(result.target),
+    namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+    null,
+    null,
+  );
+  if (targetClass.size) {
+    const [targetClassQuad] = targetClass;
+    reportDataset.add(
+      quad(
+        namedNode(resultUri),
+        namedNode(
+          'http://lblod.data.gift/vocabularies/lmb/targetClassOfFocusNode',
+        ),
+        namedNode(targetClassQuad.object.value),
+      ),
+    );
+  }
+  const targetId = dataDataset.match(
+    namedNode(result.target),
+    namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+    null,
+    null,
+  );
+  if (targetId.size) {
+    const [targetIdQuad] = targetId;
+    reportDataset.add(
+      quad(
+        namedNode(resultUri),
+        namedNode(
+          'http://lblod.data.gift/vocabularies/lmb/targetIdOfFocusNode',
+        ),
+        literal(targetIdQuad.object.value),
+      ),
+    );
+  }
+  reportDataset.add(
+    quad(
+      reportUri.subject,
+      namedNode('http://www.w3.org/ns/shacl#result'),
+      namedNode(resultUri),
+    ),
+  );
+  reportDataset.add(
+    quad(
+      namedNode(resultUri),
+      namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
+      namedNode('http://www.w3.org/ns/shacl#ValidationResult'),
+    ),
+  );
+  reportDataset.add(
+    quad(
+      namedNode(resultUri),
+      namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+      literal(id),
+    ),
+  );
+
+  if (result.message) {
+    reportDataset.add(
+      quad(
+        namedNode(resultUri),
+        namedNode('http://www.w3.org/ns/shacl#resultMessage'),
+        literal(result.message),
+      ),
+    );
+  }
+  reportDataset.add(
+    quad(
+      namedNode(resultUri),
+      namedNode('http://www.w3.org/ns/shacl#focusNode'),
+      namedNode(result.target),
+    ),
+  );
+  reportDataset.add(
+    quad(
+      namedNode(resultUri),
+      namedNode('http://www.w3.org/ns/shacl#sourceShape'),
+      namedNode(validationUri),
+    ),
+  );
+  reportDataset.add(
+    quad(
+      namedNode(resultUri),
+      namedNode('http://www.w3.org/ns/shacl#sourceConstraintComponent'),
+      namedNode(validationUri),
+    ),
+  );
+  if (result.value) {
+    reportDataset.add(
+      quad(
+        namedNode(resultUri),
+        namedNode('http://www.w3.org/ns/shacl#value'),
+        literal(result.value),
+      ),
+    );
+  }
+  reportDataset.add(
+    quad(
+      namedNode(resultUri),
+      namedNode('http://www.w3.org/ns/shacl#resultSeverity'),
+      namedNode('http://www.w3.org/ns/shacl#Error'),
+    ),
+  );
 }
 
 async function dropTempGraph(graph) {
