@@ -273,7 +273,13 @@ export async function validateDataset(dataset, shapesDataset) {
   });
   const report = await validator.validate({ dataset: dataset });
 
-  return report;
+  // Enrich validation report by removing blank nodes, adding timestamp etc.
+  const { reportDataset } = enrichValidationReport(
+    report.dataset,
+    shapesDataset,
+    dataset,
+  );
+  return reportDataset;
 }
 
 export function addConstructQueryResponseToStore(store, response) {
@@ -725,7 +731,7 @@ async function handleQuadsInBatch(quads, batchSize, callback) {
  * @param { N3.Quad } quads - Array of N3 Quads to convert to N-Triples format
  * @returns { string } The N-Triples representation of the given quads
  */
-export async function quadsToTtl(quads) {
+async function quadsToTtl(quads) {
   const result = new Promise((resolve, reject) => {
     const writer = new Writer({ format: 'N-Triples' });
     writer.addQuads(quads);
