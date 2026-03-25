@@ -213,7 +213,7 @@ export default {
 The following helper functions are provided by the service:
 
 The core validation function:
-- `validateDataset(dataset, shapesDataset) => Promise (Report)`: Function for validating a RDF/JS dataset with an RDF/JS dataset containing SHACL shapes. Note: the original validation report is enriched to support UUIDs, no blank nodes etc. A promise holding a Report object is returned.   
+- `validateDataset(dataset, shapesDataset, overrideReportURI) => Promise (Report)`: Function for validating a RDF/JS dataset with an RDF/JS dataset containing SHACL shapes. Note: the original validation report is enriched to support UUIDs, no blank nodes etc. A promise holding a Report object is returned.   
 
 (Optional) For validating SPARQL-based SHACL constraints: 
 - `getSparqlValidationObjects(shapesDataset) => Object`: Function to retrieve SHACL shapes that contain SPARQL queries. Note: the shape is expected to have type `http://mu.semte.ch/vocabularies/ext/SparqlShape`. Examples can be found in [app-lokaal-mandatenbeheer](https://github.com/lblod/app-lokaal-mandatenbeheer/tree/master/config/reports/sparql).
