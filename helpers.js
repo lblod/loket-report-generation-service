@@ -260,8 +260,21 @@ export async function batchedQuery(
   return response;
 }
 
-// Function to validate a dataset using a SHACL shape
-export async function validateDataset(dataset, shapesDataset) {
+/**
+ * Function to validate a dataset using a SHACL shape
+ *
+ * @async
+ * @function
+ * @param { N3.Store } dataset - Store containing the data that is validated
+ * @param { N3.Store } shapesDataset - Store containing the SHACL shapes
+ * @param { string } overrideReportUri - Report URI that must be used
+ * @returns { object } An object which include the `reportDataset` key
+ */
+export async function validateDataset(
+  dataset,
+  shapesDataset,
+  overrideReportUri,
+) {
   // Import ESM modules dynamically
   const rdf = await eval('import("rdf-ext")');
   const shacl = await eval('import("shacl-engine")');
@@ -278,6 +291,7 @@ export async function validateDataset(dataset, shapesDataset) {
     report.dataset,
     shapesDataset,
     dataset,
+    overrideReportUri,
   );
   return reportDataset;
 }
@@ -352,12 +366,18 @@ export async function mergeFilesContent(directory) {
  * @param { N3.Store } reportDataset - Store containing the SHACL Report to enrich
  * @param { N3.Store } shapesDataset - Store containing the SHACL shapes
  * @param { N3.Store } dataDataset - Store containing the data that is validated
+ * @param { string } overrideReportUri - Report URI that must be used
  * @returns { object } An object which include the `reportDataset` key
  */
-function enrichValidationReport(reportDataset, shapesDataset, dataDataset) {
+function enrichValidationReport(
+  reportDataset,
+  shapesDataset,
+  dataDataset,
+  overrideReportUri,
+) {
   enrichValidationResults(reportDataset, shapesDataset, dataDataset);
 
-  enrichValidationReports(reportDataset);
+  enrichValidationReports(reportDataset, overrideReportUri);
 
   // There can still apear blank nodes, for example when using special forms of sh:path: sh:alternativePath, sh:inversePath etc
   const reportDatasetWithoutBlankNodes = replaceBlankNodes(reportDataset);
@@ -437,7 +457,16 @@ function enrichValidationResults(reportDataset, shapesDataset, dataDataset) {
   }
 }
 
-function enrichValidationReports(reportDataset) {
+/**
+ * Enrich validation report with URI, uuid, created, replaces blank nodes
+ *
+ * @async
+ * @function
+ * @param { N3.Store } reportDataset - Store containing the SHACL Report to enrich
+ * @param { string } overrideReportUri - Override report with this URI
+ * @returns { void }
+ */
+function enrichValidationReports(reportDataset, overrideReportUri) {
   // Replace blank node of ValidationReport with UUID-based URI
   const validationReports = reportDataset.match(
     null,
@@ -446,17 +475,20 @@ function enrichValidationReports(reportDataset) {
   );
   for (const validationReportQuad of validationReports) {
     const reportUUID = uuid();
-    const reportURI = `http://data.lblod.info/id/reports/${reportUUID}`;
+    const reportURI = overrideReportUri
+      ? overrideReportUri
+      : `http://data.lblod.info/id/reports/${reportUUID}`;
     const reportCreatedAt = new Date().toISOString();
-    const triplesOfValidationReport = reportDataset.match(
-      validationReportQuad.subject,
-      null,
-      null,
-    );
-    for (const resultQuad of triplesOfValidationReport) {
-      reportDataset.add(
-        quad(namedNode(reportURI), resultQuad.predicate, resultQuad.object),
-      );
+
+    if (
+      !reportDataset.has(
+        quad(
+          namedNode(reportURI),
+          namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+          null,
+        ),
+      )
+    ) {
       // Add UUID
       reportDataset.add(
         quad(
@@ -476,8 +508,33 @@ function enrichValidationReports(reportDataset) {
           ),
         ),
       );
-
-      // Remove blank node
+    }
+    const triplesOfValidationReport = reportDataset.match(
+      validationReportQuad.subject,
+      null,
+      null,
+    );
+    for (const resultQuad of triplesOfValidationReport) {
+      // Only add conforms "true", when "false" is not already existing
+      if (
+        overrideReportUri &&
+        resultQuad.predicate.value === 'http://www.w3.org/ns/shacl#conforms' &&
+        !reportDataset.has(
+          namedNode(reportURI),
+          namedNode('http://www.w3.org/ns/shacl#conforms'),
+          literal(false),
+        )
+      ) {
+        reportDataset.add(
+          quad(namedNode(reportURI), resultQuad.predicate, resultQuad.object),
+        );
+      } else {
+        // Link existing triples to the report URI
+        reportDataset.add(
+          quad(namedNode(reportURI), resultQuad.predicate, resultQuad.object),
+        );
+      }
+      // Remove triples with report blank node
       reportDataset.delete(
         quad(
           validationReportQuad.subject,
@@ -952,6 +1009,27 @@ async function addShaclResultsToReport(
     namedNode('http://www.w3.org/ns/shacl#ValidationReport'),
     null,
   );
+
+  // When validation results exist and conforms exists with value true, update conforms to false
+  if (
+    validationResults.length &&
+    reportDataset.has(
+      reportUri.subject,
+      namedNode('http://www.w3.org/ns/shacl#conforms'),
+      literal(true),
+    )
+  ) {
+    reportDataset.addQuad(
+      reportUri.subject,
+      namedNode('http://www.w3.org/ns/shacl#conforms'),
+      literal(false),
+    );
+    reportDataset.removeQuad(
+      reportUri.subject,
+      namedNode('http://www.w3.org/ns/shacl#conforms'),
+      literal(true),
+    );
+  }
 
   Object.keys(validationResults).forEach((validationShapeUri) => {
     const results = validationResults[validationShapeUri];
