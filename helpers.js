@@ -1336,11 +1336,6 @@ export async function getIssuesFromReportId(
         ?report a sh:ValidationReport ;
                 mu:uuid ${sparqlEscapeString(reportId)} ;
                 sh:result ?result .
-
-        ?result a sh:ValidationResult ;
-              mu:uuid ?resultId ;
-              sh:focusNode ?focusNode ;
-              sh:resultMessage ?resultMessage .
       }
       `);
     if (result.results.bindings.length) {
@@ -1352,48 +1347,54 @@ export async function getIssuesFromReportId(
 
   const issues = await querySudo(`
     PREFIX sh: <http://www.w3.org/ns/shacl#>
-    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
-    PREFIX besluit: <http://data.vlaanderen.be/ns/besluit#>
-    PREFIX mandaat: <http://data.vlaanderen.be/ns/mandaat#>
-    PREFIX lmb: <http://lblod.data.gift/vocabularies/lmb/>
-    
-    SELECT DISTINCT ?result ?resultId ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value ?targetClassOfFocusNode
+     PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+     PREFIX besluit: <http://data.vlaanderen.be/ns/besluit#>
+     PREFIX mandaat: <http://data.vlaanderen.be/ns/mandaat#>
+     PREFIX lmb: <http://lblod.data.gift/vocabularies/lmb/>
+     
+    SELECT ?result ?resultId ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value (GROUP_CONCAT(DISTINCT ?targetClassOfFocusNode; separator=",") AS ?targetClassesOfFocusNode)
     WHERE {
-      {
-        select distinct ?result 
-        where {
-          ?report a sh:ValidationReport ;
-                  mu:uuid ${sparqlEscapeString(reportId)} ;
-                  sh:result ?result .
+        {
+            SELECT DISTINCT ?result ?resultId ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value
+            WHERE {
+                {
+                    select distinct ?result 
+                    where {
+                    ?report a sh:ValidationReport ;
+                            mu:uuid ${sparqlEscapeString(reportId)} ;
+                            sh:result ?result .
+                    }
+                    LIMIT ${pageSize}
+                    OFFSET ${offset}
+                }
+            
+                ?result a sh:ValidationResult ;
+                        mu:uuid ?resultId ;
+                        sh:focusNode ?focusNode ;
+                        sh:resultMessage ?resultMessage .
+            
+                ?focusNode mu:uuid ?focusNodeId .
+            
+                OPTIONAL {
+                    ?result sh:value ?value .
+                }
+                OPTIONAL {
+                    ?result sh:resultSeverity ?resultSeverity .
+                }
+                OPTIONAL {
+                    ?result sh:sourceShape ?sourceShape .
+                }
+                OPTIONAL {
+                    ?result sh:sourceConstraintComponent ?sourceConstraintComponent .
+                }
+                OPTIONAL {
+                    ?result sh:resultPath ?resultPath .
+                }
+            }
         }
-        LIMIT ${pageSize}
-        OFFSET ${offset}
-      }
-
-      ?result a sh:ValidationResult ;
-              mu:uuid ?resultId ;
-              sh:focusNode ?focusNode ;
-              sh:resultMessage ?resultMessage .
-
-      ?focusNode a ?targetClassOfFocusNode ;
-                mu:uuid ?focusNodeId .
-
-      OPTIONAL {
-        ?result sh:value ?value .
-      }
-      OPTIONAL {
-        ?result sh:resultSeverity ?resultSeverity .
-      }
-      OPTIONAL {
-        ?result sh:sourceShape ?sourceShape .
-      }
-      OPTIONAL {
-        ?result sh:sourceConstraintComponent ?sourceConstraintComponent .
-      }
-      OPTIONAL {
-        ?result sh:resultPath ?resultPath .
-      }
+        ?focusNode a ?targetClassOfFocusNode .
     }
+    GROUP BY ?result ?resultId ?focusNode ?focusNodeId ?resultSeverity ?sourceConstraintComponent ?sourceShape ?resultMessage ?resultPath ?value
   `);
 
   if (!issues.results.bindings) {
@@ -1415,7 +1416,7 @@ export async function getIssuesFromReportId(
       resultMessage: issue.resultMessage?.value,
       resultPath: issue.resultPath?.value,
       value: issue.value?.value,
-      targetClassOfFocusNode: issue.targetClassOfFocusNode.value,
+      targetClassOfFocusNode: issue.targetClassesOfFocusNode.value,
     };
   });
   return {
