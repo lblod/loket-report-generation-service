@@ -423,7 +423,7 @@ function enrichValidationResults(reportDataset, shapesDataset, dataDataset) {
 
     if (!isClassConstraintComponent) {
       // Add targetClass to validation result
-      if (targetClass)
+      if (targetClass) {
         reportDataset.add(
           quad(
             validationResultQuad.subject,
@@ -433,6 +433,7 @@ function enrichValidationResults(reportDataset, shapesDataset, dataDataset) {
             namedNode(targetClass),
           ),
         );
+      }
       // Add UUID
       reportDataset.add(
         quad(
@@ -555,15 +556,17 @@ function removeBlankNodesOfValidationResult(
     null,
     null,
   );
-  for (const resultQuad of triplesOfValidationResult)
+  for (const resultQuad of triplesOfValidationResult) {
     reportDataset.delete(resultQuad);
+  }
   const triplesPointingToValidationResult = reportDataset.match(
     null,
     null,
     validationResultNode,
   );
-  for (const resultQuad of triplesPointingToValidationResult)
+  for (const resultQuad of triplesPointingToValidationResult) {
     reportDataset.delete(resultQuad);
+  }
 }
 
 function replaceBlankNodesOfValidationResult(
@@ -661,8 +664,9 @@ function getTargetClass(
       null,
     );
     // No type of focus node found in validation result as fallback to retrieve targetClass
-    if (!focusNodeTypeInDatasetQuads.size) return undefined;
-    else {
+    if (!focusNodeTypeInDatasetQuads.size) {
+      return undefined;
+    } else {
       const [focusNodeTypeInDatasetQuad] = focusNodeTypeInDatasetQuads;
       return focusNodeTypeInDatasetQuad.object.value;
     }
@@ -679,7 +683,9 @@ function getTargetId(validationResultNode, reportDataset, dataDataset) {
     null,
   );
   // No focus node found
-  if (!focusNodeQuads.size) return undefined;
+  if (!focusNodeQuads.size) {
+    return undefined;
+  }
   const [focusNodeQuad] = focusNodeQuads;
   const uuidQuads = dataDataset.match(
     focusNodeQuad.object,
@@ -1033,15 +1039,15 @@ async function addShaclResultsToReport(
 
   Object.keys(validationResults).forEach((validationShapeUri) => {
     const results = validationResults[validationShapeUri];
-    results.forEach((result) =>
+    results.forEach((result) => {
       addResultToReport(
         reportDataset,
         dataDataset,
         reportUri,
         validationShapeUri,
         result,
-      ),
-    );
+      );
+    });
   });
 }
 
@@ -1321,7 +1327,9 @@ export async function getIssuesFromReportId(
   pageSize = 100,
   offset = 0,
 ) {
-  if (!reportId) return [];
+  if (!reportId) {
+    return [];
+  }
 
   const countFn = async () => {
     const result = await querySudo(`
