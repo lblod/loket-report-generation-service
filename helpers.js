@@ -1372,9 +1372,11 @@ export async function getIssuesFromReportId(
                         mu:uuid ?resultId ;
                         sh:focusNode ?focusNode ;
                         sh:resultMessage ?resultMessage .
-            
-                ?focusNode mu:uuid ?focusNodeId .
-            
+
+                OPTIONAL {
+                  ?focusNode mu:uuid ?focusNodeId .
+                }
+                
                 OPTIONAL {
                     ?result sh:value ?value .
                 }
