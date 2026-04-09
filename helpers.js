@@ -297,6 +297,8 @@ export async function validateDataset(
 }
 
 export function addConstructQueryResponseToStore(store, response) {
+  // The language key of Virtuoso is not spec compliant: see https://github.com/rubensworks/sparqljson-parse.js/issues/57
+  response = normalizeLangKeys(response);
   const rdfJsObjects = sparqlJsonParser.parseJsonResults(response);
 
   rdfJsObjects.forEach((quad) => {
@@ -309,6 +311,24 @@ export function addConstructQueryResponseToStore(store, response) {
   });
 
   return store;
+}
+
+// Renames "lang" to "xml:lang" in the SPARQL JSON response to be compliant with the SPARQL 1.1 Query Results JSON Format
+function normalizeLangKeys(response) {
+  if (!response?.results?.bindings) return response;
+
+  response.results.bindings.forEach((binding) => {
+    Object.values(binding).forEach((term) => {
+      if (term && typeof term === 'object') {
+        if (term.lang && !term['xml:lang']) {
+          term['xml:lang'] = term.lang;
+          delete term.lang;
+        }
+      }
+    });
+  });
+
+  return response;
 }
 
 export async function parseTurtleString(turtleString) {
