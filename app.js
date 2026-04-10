@@ -2,7 +2,11 @@ import { app, errorHandler } from 'mu';
 import scheduleReportTask from './util/schedule-report-task';
 import bodyParser from 'body-parser';
 import reports from './config/index';
-import { getIssuesFromReportId, getLatestShaclReportId } from './helpers';
+import {
+  getIssuesFromReportId,
+  getLatestShaclReportId,
+  shaclReportIdExists,
+} from './helpers';
 
 // parse application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -117,6 +121,22 @@ function buildIssuesResponse(req, issues, total, pageNumber, pageSize) {
 
 app.get('/shacl-reports/:id/issues', async (req, res) => {
   try {
+    const reportId =
+      req.params.id === 'latest'
+        ? await getLatestShaclReportId()
+        : req.params.id;
+    if (!reportId || !(await shaclReportIdExists(reportId))) {
+      return res.status(404).json({
+        errors: [
+          {
+            status: '404',
+            title: 'Report not found',
+            detail: `There's no SHACL report available with id ${req.params.id}.`,
+          },
+        ],
+      });
+    }
+
     const pagination = parsePagination(req);
 
     if (pagination.error) {
@@ -132,11 +152,6 @@ app.get('/shacl-reports/:id/issues', async (req, res) => {
     }
 
     const { pageSize, pageNumber, offset } = pagination;
-
-    const reportId =
-      req.params.id === 'latest'
-        ? await getLatestShaclReportId()
-        : req.params.id;
 
     const { issues, total } = await getIssuesFromReportId(
       reportId,

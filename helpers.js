@@ -1348,7 +1348,10 @@ export async function getIssuesFromReportId(
   offset = 0,
 ) {
   if (!reportId) {
-    return [];
+    return {
+      issues: [],
+      total: 0,
+    };
   }
 
   const countFn = async () => {
@@ -1453,6 +1456,25 @@ export async function getIssuesFromReportId(
     issues: transformedIssues,
     total: total,
   };
+}
+
+export async function shaclReportIdExists(reportId, namedGraphs = []) {
+  const graphValues = namedGraphs.length
+    ? `VALUES ?g {
+          ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
+        }`
+    : '';
+  const response = await querySudo(`
+    PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+    PREFIX sh: <http://www.w3.org/ns/shacl#>
+
+    ASK {
+      ${graphValues}
+      ?report a sh:ValidationReport ;
+              mu:uuid ${sparqlEscapeString(reportId)} .
+    }
+  `);
+  return response.boolean;
 }
 
 export async function getLatestShaclReportId(namedGraphs = []) {
