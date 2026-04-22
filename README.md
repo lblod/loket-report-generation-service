@@ -214,15 +214,6 @@ triggering one. For this you can send a POST request to `/reports` with the
 following JSON payload, where `myReport` is the name defined in your report
 file.
 
-```
-POST /reports
-Content-Type: "application/json"
-
-{
-  "data": {
-    "attributes": {
-      "reportName": "myReport"
-   }
-  }
-}
+```bash
+curl -X POST http://localhost/reports -H 'Content-Type: application/json' -d '{"data":{"attributes":{"reportName":"myReport"}}}'
 ```
