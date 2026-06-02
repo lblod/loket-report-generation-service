@@ -546,6 +546,16 @@ function enrichValidationReports(reportDataset, overrideReportUri, overrideRepor
             ),
           ),
         );
+        reportDataset.add(
+          quad(
+            namedNode(reportURI),
+            namedNode('http://purl.org/dc/terms/modified'),
+            literal(
+              reportCreatedAt,
+              namedNode('http://www.w3.org/2001/XMLSchema#dateTime'),
+            ),
+          ),
+        );
       }
     }
     const triplesOfValidationReport = reportDataset.match(
