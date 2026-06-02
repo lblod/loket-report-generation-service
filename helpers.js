@@ -268,12 +268,14 @@ export async function batchedQuery(
  * @param { N3.Store } dataset - Store containing the data that is validated
  * @param { N3.Store } shapesDataset - Store containing the SHACL shapes
  * @param { string } overrideReportUri - Report URI that must be used
+ * @param { string } overrideReportUuid - Report UUID that must be used
  * @returns { object } An object which include the `reportDataset` key
  */
 export async function validateDataset(
   dataset,
   shapesDataset,
   overrideReportUri,
+  overrideReportUuid,
 ) {
   // Import ESM modules dynamically
   const rdf = await eval('import("rdf-ext")');
@@ -292,6 +294,7 @@ export async function validateDataset(
     shapesDataset,
     dataset,
     overrideReportUri,
+    overrideReportUuid,
   );
   return reportDataset;
 }
@@ -387,6 +390,7 @@ export async function mergeFilesContent(directory) {
  * @param { N3.Store } shapesDataset - Store containing the SHACL shapes
  * @param { N3.Store } dataDataset - Store containing the data that is validated
  * @param { string } overrideReportUri - Report URI that must be used
+ * @param { string } overrideReportUuid - Report UUID that must be used (should be provided when overrideReportUri is provided, otherwise a new UUID will be generated)
  * @returns { object } An object which include the `reportDataset` key
  */
 function enrichValidationReport(
@@ -394,10 +398,11 @@ function enrichValidationReport(
   shapesDataset,
   dataDataset,
   overrideReportUri,
+  overrideReportUuid,
 ) {
   enrichValidationResults(reportDataset, shapesDataset, dataDataset);
 
-  enrichValidationReports(reportDataset, overrideReportUri);
+  enrichValidationReports(reportDataset, overrideReportUri, overrideReportUuid);
 
   // There can still apear blank nodes, for example when using special forms of sh:path: sh:alternativePath, sh:inversePath etc
   const reportDatasetWithoutBlankNodes = replaceBlankNodes(reportDataset);
@@ -478,6 +483,16 @@ function enrichValidationResults(reportDataset, shapesDataset, dataDataset) {
   }
 }
 
+function retrieveUuidFromSubject(subject) {
+  const uuidQuads = subject
+    ? subject.match(
+      null,
+      namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
+      null,
+    )
+    : [];
+  return uuidQuads.length > 0 ? uuidQuads[0].object.value : null;
+}
 /**
  * Enrich validation report with URI, uuid, created, replaces blank nodes
  *
@@ -485,9 +500,10 @@ function enrichValidationResults(reportDataset, shapesDataset, dataDataset) {
  * @function
  * @param { N3.Store } reportDataset - Store containing the SHACL Report to enrich
  * @param { string } overrideReportUri - Override report with this URI
+ * @param { string } overrideReportUuid - Override report with this UUID (should be provided when overrideReportUri is provided, otherwise a new UUID will be generated)
  * @returns { void }
  */
-function enrichValidationReports(reportDataset, overrideReportUri) {
+function enrichValidationReports(reportDataset, overrideReportUri, overrideReportUuid) {
   // Replace blank node of ValidationReport with UUID-based URI
   const validationReports = reportDataset.match(
     null,
@@ -495,7 +511,7 @@ function enrichValidationReports(reportDataset, overrideReportUri) {
     namedNode('http://www.w3.org/ns/shacl#ValidationReport'),
   );
   for (const validationReportQuad of validationReports) {
-    const reportUUID = uuid();
+    const reportUUID = overrideReportUuid ? overrideReportUuid : uuid();
     const reportURI = overrideReportUri
       ? overrideReportUri
       : `http://data.lblod.info/id/reports/${reportUUID}`;
@@ -518,17 +534,19 @@ function enrichValidationReports(reportDataset, overrideReportUri) {
           literal(reportUUID),
         ),
       );
-      // Add creation time stamp
-      reportDataset.add(
-        quad(
-          namedNode(reportURI),
-          namedNode('http://purl.org/dc/terms/created'),
-          literal(
-            reportCreatedAt,
-            namedNode('http://www.w3.org/2001/XMLSchema#dateTime'),
+      // Add creation time stamp when not reusing reportUri
+      if (!overrideReportUri) {
+        reportDataset.add(
+          quad(
+            namedNode(reportURI),
+            namedNode('http://purl.org/dc/terms/created'),
+            literal(
+              reportCreatedAt,
+              namedNode('http://www.w3.org/2001/XMLSchema#dateTime'),
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
     const triplesOfValidationReport = reportDataset.match(
       validationReportQuad.subject,
