@@ -483,16 +483,6 @@ function enrichValidationResults(reportDataset, shapesDataset, dataDataset) {
   }
 }
 
-function retrieveUuidFromSubject(subject) {
-  const uuidQuads = subject
-    ? subject.match(
-      null,
-      namedNode('http://mu.semte.ch/vocabularies/core/uuid'),
-      null,
-    )
-    : [];
-  return uuidQuads.length > 0 ? uuidQuads[0].object.value : null;
-}
 /**
  * Enrich validation report with URI, uuid, created, replaces blank nodes
  *
@@ -503,7 +493,11 @@ function retrieveUuidFromSubject(subject) {
  * @param { string } overrideReportUuid - Override report with this UUID (should be provided when overrideReportUri is provided, otherwise a new UUID will be generated)
  * @returns { void }
  */
-function enrichValidationReports(reportDataset, overrideReportUri, overrideReportUuid) {
+function enrichValidationReports(
+  reportDataset,
+  overrideReportUri,
+  overrideReportUuid,
+) {
   // Replace blank node of ValidationReport with UUID-based URI
   const validationReports = reportDataset.match(
     null,
