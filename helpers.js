@@ -6,7 +6,7 @@ import {
   uuid,
 } from 'mu';
 import { querySudo, updateSudo } from '@lblod/mu-auth-sudo';
-import fs from 'fs';
+import fs, { cpSync } from 'fs';
 import {
   DEFAULT_GRAPH,
   ONLY_KEEP_LATEST_REPORT,
@@ -825,6 +825,44 @@ async function handleQuadsInBatch(quads, batchSize, callback) {
 }
 
 /**
+ * Escapes a literal term that is a (language) string for use in SPARQL.
+ *
+ * Wraps the string in quotes and escapes necessary characters. Adds language tag if provided in the value object.
+ *
+ * @param {object} term RDF/JS Term of type Literal to escape, object with 'value' and optionally 'language' properties
+ * @return {string} Escaped string for use in SPARQL.
+ */
+function sparqlEscapeLangString(term) {
+  if (
+    term.datatype &&
+    term.datatype.value ===
+      'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString' &&
+    term.language &&
+    term.language.length > 0
+  ) {
+    return `${sparqlEscapeString(term.value)}@${term.language}`;
+  }
+
+  return sparqlEscapeString(term.value);
+}
+
+/**
+ * Checks whether RDF/JS Term is a literal term and is a (language) string
+ *
+ * @param {object} term RDF/JS Term
+ * @return {string} Escaped string for use in SPARQL.
+ */
+function termIsString(term) {
+  return (
+    term.termType === 'Literal' &&
+    term.datatype &&
+    (term.datatype.value === 'http://www.w3.org/2001/XMLSchema#string' ||
+      term.datatype.value ===
+        'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString')
+  );
+}
+
+/**
  * Returns string in N-Triples format from N3 Quads.
  *
  * @async
@@ -833,9 +871,17 @@ async function handleQuadsInBatch(quads, batchSize, callback) {
  * @returns { string } The N-Triples representation of the given quads
  */
 async function quadsToTtl(quads) {
-  const result = new Promise((resolve, reject) => {
-    const writer = new Writer({ format: 'N-Triples' });
-    writer.addQuads(quads);
+  let nTriples = '';
+  const writer = new Writer({ format: 'N-Triples' });
+  for (const quad of quads) {
+    // String literals are not properly escaped by the N3 Writer causing errors in sparql-parser, so we handle these separately here
+    if (termIsString(quad.object)) {
+      nTriples += `${sparqlEscapeUri(quad.subject.value)} ${sparqlEscapeUri(quad.predicate.value)} ${sparqlEscapeLangString(quad.object)} .\n`;
+    } else {
+      writer.addQuads([quad]); // parsed normally with N3 parser
+    }
+  }
+  const nTriplesFromParser = new Promise((resolve, reject) => {
     writer.end((error, result) => {
       if (error) {
         reject(error);
@@ -844,7 +890,9 @@ async function quadsToTtl(quads) {
       }
     });
   });
-  return result;
+
+  nTriples += await nTriplesFromParser;
+  return nTriples;
 }
 
 /**
@@ -1241,7 +1289,7 @@ async function loadDatasetToTempGraph(dataset) {
   const graph = `http://mu.semte.ch/graphs/temp/validation/${id}`;
   const insertBatch = async (batch) => {
     const ttl = await quadsToTtl(batch);
-    await querySudo(
+    await updateSudo(
       `INSERT DATA {
       GRAPH ${sparqlEscapeUri(graph)} { ${ttl} }
       GRAPH <http://mu.semte.ch/graphs/public> {
