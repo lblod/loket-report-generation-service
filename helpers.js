@@ -1044,6 +1044,13 @@ export async function addSparqlValidationsToReport(
   reportDataset,
   sparqlValidationObjects,
 ) {
+  if (
+    !sparqlValidationObjects ||
+    Object.keys(sparqlValidationObjects).length === 0
+  ) {
+    console.log('No SPARQL validations to run');
+    return;
+  }
   const graph = await loadDatasetToTempGraph(dataDataset);
   try {
     const results = await runSparqlValidations(graph, sparqlValidationObjects);
