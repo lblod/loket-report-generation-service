@@ -6,7 +6,7 @@ import {
   uuid,
 } from 'mu';
 import { querySudo, updateSudo } from '@lblod/mu-auth-sudo';
-import fs, { cpSync } from 'fs';
+import fs from 'fs';
 import {
   DEFAULT_GRAPH,
   ONLY_KEEP_LATEST_REPORT,
