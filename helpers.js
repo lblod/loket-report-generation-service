@@ -935,6 +935,40 @@ export async function deletePreviousShaclValidationReports(namedGraphs) {
   }
 }
 
+async function deleteShaclValidationResultBatch(
+  safeReportUri,
+  safeNamedGraphs,
+  batchNumber,
+) {
+  // Fetch a batch of result URIs
+  const batchResponse = await querySudo(`
+    PREFIX sh: <http://www.w3.org/ns/shacl#>
+
+    SELECT DISTINCT ?result
+    WHERE {
+      VALUES ?g { ${safeNamedGraphs} }
+      GRAPH ?g { ${safeReportUri} sh:result ?result . }
+    }
+    LIMIT ${INSERT_BATCH_SIZE}
+    OFFSET ${batchNumber * INSERT_BATCH_SIZE}
+  `);
+  const safeResults = batchResponse.results.bindings
+    .map((b) => sparqlEscapeUri(b.result.value))
+    .join('\n');
+
+  if (safeResults) {
+    await querySudo(`
+      DELETE {
+        GRAPH ?g { ?result ?p ?o . }
+      }
+      WHERE {
+        VALUES ?g { ${safeNamedGraphs} }
+        VALUES ?result { ${safeResults} }
+        GRAPH ?g { ?result ?p ?o . }
+      }
+    `);
+  }
+}
 async function deleteShaclValidationReportInDatabase(reportUri, namedGraphs) {
   const safeNamedGraphs = namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n');
   const safeReportUri = sparqlEscapeUri(reportUri);
@@ -956,34 +990,7 @@ async function deleteShaclValidationReportInDatabase(reportUri, namedGraphs) {
   const batchCount = Math.ceil(total / INSERT_BATCH_SIZE);
 
   for (let i = 0; i < batchCount; i++) {
-    // Fetch a batch of result URIs
-    const batchResponse = await querySudo(`
-      PREFIX sh: <http://www.w3.org/ns/shacl#>
-
-      SELECT DISTINCT ?result
-      WHERE {
-        VALUES ?g { ${safeNamedGraphs} }
-        GRAPH ?g { ${safeReportUri} sh:result ?result . }
-      }
-      LIMIT ${INSERT_BATCH_SIZE}
-      OFFSET ${i * INSERT_BATCH_SIZE}
-    `);
-    const safeResults = batchResponse.results.bindings
-      .map((b) => sparqlEscapeUri(b.result.value))
-      .join('\n');
-
-    if (safeResults) {
-      await querySudo(`
-        DELETE {
-          GRAPH ?g { ?result ?p ?o . }
-        }
-        WHERE {
-          VALUES ?g { ${safeNamedGraphs} }
-          VALUES ?result { ${safeResults} }
-          GRAPH ?g { ?result ?p ?o . }
-        }
-      `);
-    }
+    await deleteShaclValidationResultBatch(safeReportUri, safeNamedGraphs, i);
   }
 
   // Report can have thousands of validation result triples
