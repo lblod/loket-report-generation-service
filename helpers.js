@@ -935,46 +935,95 @@ export async function deletePreviousShaclValidationReports(namedGraphs) {
   }
 }
 
-async function deleteShaclValidationReportInDatabase(reportUri, namedGraphs) {
-  // done in two parts because single query confuses db because of join result set explosion
-  const queryDeleteResults = `
+async function deleteShaclValidationResultBatch(
+  safeReportUri,
+  safeNamedGraphs,
+  batchNumber,
+) {
+  // Fetch a batch of result URIs
+  const batchResponse = await querySudo(`
     PREFIX sh: <http://www.w3.org/ns/shacl#>
 
-    DELETE {
-      GRAPH ?g {
-        ?result ?presult ?oresult .
-      }
-    }
+    SELECT DISTINCT ?result
     WHERE {
-      VALUES ?g {
-        ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
-      }
-      GRAPH ?g {
-        ${sparqlEscapeUri(reportUri)} sh:result ?result .
-
-        ?result ?presult ?oresult .
-      }
+      VALUES ?g { ${safeNamedGraphs} }
+      GRAPH ?g { ${safeReportUri} sh:result ?result . }
     }
-  `;
-  await querySudo(queryDeleteResults);
-  const queryString = `
-        PREFIX sh: <http://www.w3.org/ns/shacl#>
+    LIMIT ${INSERT_BATCH_SIZE}
+    OFFSET ${batchNumber * INSERT_BATCH_SIZE}
+  `);
+  const safeResults = batchResponse.results.bindings
+    .map((b) => sparqlEscapeUri(b.result.value))
+    .join('\n');
 
+  if (safeResults) {
+    await querySudo(`
+      DELETE {
+        GRAPH ?g { ?result ?p ?o . }
+      }
+      WHERE {
+        VALUES ?g { ${safeNamedGraphs} }
+        VALUES ?result { ${safeResults} }
+        GRAPH ?g { ?result ?p ?o . }
+      }
+    `);
+  }
+}
+async function deleteShaclValidationReportInDatabase(reportUri, namedGraphs) {
+  const safeNamedGraphs = namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n');
+  const safeReportUri = sparqlEscapeUri(reportUri);
+
+  // Count results to determine number of batches
+  const countResponse = await querySudo(`
+    PREFIX sh: <http://www.w3.org/ns/shacl#>
+
+    SELECT (COUNT(DISTINCT ?result) AS ?count)
+    WHERE {
+      VALUES ?g { ${safeNamedGraphs} }
+      GRAPH ?g { ${safeReportUri} sh:result ?result . }
+    }
+  `);
+  const total = parseInt(
+    countResponse.results.bindings[0]?.count?.value ?? '0',
+    10,
+  );
+  const batchCount = Math.ceil(total / INSERT_BATCH_SIZE);
+
+  for (let i = 0; i < batchCount; i++) {
+    await deleteShaclValidationResultBatch(safeReportUri, safeNamedGraphs, i);
+  }
+
+  // Report can have thousands of validation result triples
+  // Here we delete these triples in batches
+  let reportExists = true;
+  while (reportExists) {
+    const askResponse = await querySudo(`
+      ASK {
+        VALUES ?g { ${safeNamedGraphs} }
+        GRAPH ?g { ${safeReportUri} ?p ?o . }
+      }
+    `);
+    reportExists = askResponse.boolean;
+
+    if (reportExists) {
+      await querySudo(`
         DELETE {
-          GRAPH ?g {
-            ${sparqlEscapeUri(reportUri)} ?preport ?oreport .
-          }
+          GRAPH ?g { ${safeReportUri} ?p ?o . }
         }
         WHERE {
-          VALUES ?g {
-            ${namedGraphs.map((g) => sparqlEscapeUri(g)).join('\n')}
+          VALUES ?g { ${safeNamedGraphs} }
+          {
+            SELECT ?p ?o WHERE {
+              VALUES ?g { ${safeNamedGraphs} }
+              GRAPH ?g { ${safeReportUri} ?p ?o . }
+            }
+            LIMIT ${INSERT_BATCH_SIZE}
           }
-          GRAPH ?g {
-            ${sparqlEscapeUri(reportUri)} ?preport ?oreport .
-          }
+          GRAPH ?g { ${safeReportUri} ?p ?o . }
         }
-    `;
-  await querySudo(queryString);
+      `);
+    }
+  }
 }
 
 /**
