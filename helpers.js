@@ -998,23 +998,24 @@ async function deleteShaclValidationReportInDatabase(reportUri, namedGraphs) {
     `);
     reportExists = askResponse.boolean;
 
-    if (!reportExists) break;
-    await querySudo(`
-      DELETE {
-        GRAPH ?g { ${safeReportUri} ?p ?o . }
-      }
-      WHERE {
-        VALUES ?g { ${safeNamedGraphs} }
-        {
-          SELECT ?p ?o WHERE {
-            VALUES ?g { ${safeNamedGraphs} }
-            GRAPH ?g { ${safeReportUri} ?p ?o . }
-          }
-          LIMIT ${INSERT_BATCH_SIZE}
+    if (reportExists) {
+      await querySudo(`
+        DELETE {
+          GRAPH ?g { ${safeReportUri} ?p ?o . }
         }
-        GRAPH ?g { ${safeReportUri} ?p ?o . }
-      }
-    `);
+        WHERE {
+          VALUES ?g { ${safeNamedGraphs} }
+          {
+            SELECT ?p ?o WHERE {
+              VALUES ?g { ${safeNamedGraphs} }
+              GRAPH ?g { ${safeReportUri} ?p ?o . }
+            }
+            LIMIT ${INSERT_BATCH_SIZE}
+          }
+          GRAPH ?g { ${safeReportUri} ?p ?o . }
+        }
+      `);
+    }
   }
 }
 
