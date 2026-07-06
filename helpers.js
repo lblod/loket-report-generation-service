@@ -972,18 +972,18 @@ async function deleteShaclValidationReportInDatabase(reportUri, namedGraphs) {
       .map((b) => sparqlEscapeUri(b.result.value))
       .join('\n');
 
-    if (!safeResults) continue;
-
-    await querySudo(`
-      DELETE {
-        GRAPH ?g { ?result ?p ?o . }
-      }
-      WHERE {
-        VALUES ?g { ${safeNamedGraphs} }
-        VALUES ?result { ${safeResults} }
-        GRAPH ?g { ?result ?p ?o . }
-      }
-    `);
+    if (safeResults) {
+      await querySudo(`
+        DELETE {
+          GRAPH ?g { ?result ?p ?o . }
+        }
+        WHERE {
+          VALUES ?g { ${safeNamedGraphs} }
+          VALUES ?result { ${safeResults} }
+          GRAPH ?g { ?result ?p ?o . }
+        }
+      `);
+    }
   }
 
   // Report can have thousands of validation result triples
